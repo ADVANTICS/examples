@@ -43,12 +43,12 @@
                         being initialised. Important charge information are exchanged.
                     Connected_With_Full_Info:: All charge information from the PEV were retrieved
                         and a charge session can be considered to be properly open.
-                    Insulation_Test:: Insulation of the charge cable is being tested.
+                    Insulation_Test:: Insulation of the charge cable that is being tested.
                     Precharge:: Charger is matching its output voltage to the present voltage of the
                         battery.
                     Waiting_For_Charge:: PEV is about to begin the actual charging.
                     Charging:: Main charging loop going on.
-                    Ending_Charge:: A normal charge stop condition happenned and the PEV is exiting
+                    Ending_Charge:: A normal charge stop condition happened and the PEV is exiting
                         the charging loop.
                     Welding_Detection:: PEV is testing if its contactors are welded.
                     Closing_Communication:: PEV can unplug and charger is reinitialising in order to
@@ -168,7 +168,7 @@
                 vehicle decides to consider precharge done when it senses on its inlet a voltage that
                 is +/- 20 V of its battery voltage.
 
-                During __Power_Transfer__, actual power is being transfered in one direction or
+                During __Power_Transfer__, actual power is being transferred in one direction or
                 another. The meaning of setpoints depends on <<DC_Power_Control.Setpoints_Mode>>.
                 The transfer direction depends on the sign of current setpoints, with positive
                 meaning power being delivered to the vehicle (ie. charge). And negative meaning
@@ -180,7 +180,7 @@
                 attached to their output. Charging protocols do not define it. In a typical situation,
                 insulation tests and precharge have to be controlled in Constant Voltage. Whereas,
                 when a battery is connected to the charger output, the vehicle BMS specifies the
-                maximum current to be delivered to it, or consummed from it. Which makes it a
+                maximum current to be delivered to it, or consumed from it. Which makes it a
                 Constant Current process. But you might also encounter a vehicle with a different
                 pack voltage (eg. 800 V), and using a DC/DC in between the charger output and its
                 battery to convert the voltage. In such case, you might have to run into Constant
@@ -188,7 +188,7 @@
 
                 # Setpoints mode
 
-                Either the vehicle control the current to be delivered or consummed (that's
+                Either the vehicle control the current to be delivered or consumed (that's
                 __Target_Mode__). Or, a range of acceptable values is given, and power modules are
                 free to operate within that range (that's __Range_Mode__).
 
@@ -222,7 +222,7 @@
                 __Range_Mode__ (power modules choose when to switch over) or __Target_Mode__ (vehicle
                 decides when it is time to charge or discharge its battery). Bidirectional in range
                 mode would typically happen with CHAdeMO V2G, or ISO 15118-20 in Dynamic mode.
-                Whereas birectional in target mode would happen with ISO 15118-20 in Scheduled mode.
+                Whereas bidirectional in target mode would happen with ISO 15118-20 in Scheduled mode.
 
                 When in range mode, a portion of the range will be in the negative values (or all of
                 it if only discharge is possible). Note that the positive portion of the range, used
@@ -243,7 +243,7 @@
                 symmetric). If no discharge is possible, then the min is positive. And if no charge
                 is possible, then the max is negative.
 
-                WARNING: The vehicle might not necessarily ramps up or down its requests.
+                WARNING: The vehicle might not necessarily ramp up or down its requests.
             ]]></Notes>
 
             <Producer>
@@ -254,7 +254,7 @@
                 <Notes>
                     Voltage setpoint.
 
-                    In __Insulation_Test__, this is the test voltage, and it should corresponds to
+                    In __Insulation_Test__, this is the test voltage, and it should correspond to
                     the maximum voltage a charger can theoretically deliver during a charge session.
                     At the end of the test, this setpoint is set back to 0 V.
 
@@ -289,7 +289,7 @@
                 <Notes><![CDATA[
                     Maximum current to draw (if negative), or minimum current to provide (if positive).
 
-                    In __Target_Mode__, this signal will have the same value than
+                    In __Target_Mode__, this signal will have the same value as
                     <<DC_Power_Control.Current_Range_Max>>.
 
                     In __Insulation_Test__, this signal is not relevant.
@@ -311,7 +311,7 @@
 
                     __Standby__: Power modules do not run any power processing function, while
                     remaining ready to receive future requests. A load might still be connected to
-                    their output. Therefore, unless comanded by <<DC_Power_Control.Lower_Output_Voltage>>,
+                    their output. Therefore, unless commanded by <<DC_Power_Control.Lower_Output_Voltage>>,
                     it should remain floating, with contactors still closed, and no discharge of
                     their output capacitors should be attempted.
 
@@ -324,9 +324,9 @@
                     The purpose is to avoid arcing when vehicle contactors close.
                     Precharge is specific to CCS. In CHAdeMO you either have a diode at the output
                     of the charger (unidirectional). Or a custom precharge circuit around the main
-                    output contactors (bidirectionnal, or unidirectional made without diode).
+                    output contactors (bidirectional, or unidirectional made without diode).
 
-                    __Power_Transfer__: Main mode of operation, as power is being transfered in one
+                    __Power_Transfer__: Main mode of operation, as power is being transferred in one
                     way or another. See the documentation of <<DC_Power_Control.Setpoints_Mode>> and
                     others signals of this message for more details.
                 ]]></Notes>
@@ -561,7 +561,7 @@
         <Message id="0x6B200" length="8" name="ADM_CO_CUI1_Inputs" interval="1000" format="extended">
             <Notes>
                 Controller (ADM-CO-CUI1 hardware variant, ie. "generic/mobile") is reporting various
-                information about its inputs. It is sent every seconds (for temperature channels).
+                information about its inputs. It is sent every second (for temperature channels).
                 Or on change for other digital inputs.
             </Notes>
 
@@ -663,7 +663,7 @@
         <Message id="0x6B201" length="8" name="ADM_CS_SECC_Inputs" interval="1000" format="extended">
             <Notes>
                 Controller (ADM-CS-SECC hardware variant, ie. "DIN rail") is reporting various
-                information about its inputs. It is sent every seconds (for temperature channels).
+                information about its inputs. It is sent every second (for temperature channels).
                 Or on change for other digital inputs.
             </Notes>
 
@@ -747,9 +747,9 @@
             <Signal name="Dynamic_Target_Current" offset="0" length="16">
                 <Notes><![CDATA[
                     This signal is useful only during power transfer using CCS ISO15118-20 Dynamic mode.
-                    As the charger negociates a current range with the vehicle, a third party needs to specify
+                    As the charger negotiates a current range with the vehicle, a third party needs to specify
                     the current setpoint within that range.
-                    OCPP1.6J was adapted to provide this inforamtion.
+                    OCPP1.6J was adapted to provide this information.
                 ]]></Notes>
                 <Value type="signed" slope="0.1" unit="Amps" />
             </Signal>
