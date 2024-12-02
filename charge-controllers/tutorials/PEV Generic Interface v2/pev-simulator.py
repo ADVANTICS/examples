@@ -557,7 +557,10 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = Path('can.conf'),
+        can_config: Path = Path('can.conf'),
+        charger_dead_time: float = 1,
+        charger_voltage_ramp_up_slope: float = 200,
+        contactors_delay: float = 0.6,
 ) -> None:
     """Simulator of BMS/vehicle side compatible with Advantics PEV Generic CAN interface v2"""
     try:
@@ -566,7 +569,12 @@ def cli_main(
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
 
-    with Application(bus_config) as app:
+    with Application(
+            bus_config,
+            charger_dead_time=charger_dead_time,
+            charger_voltage_ramp_up_slope=charger_voltage_ramp_up_slope,
+            contactors_delay=contactors_delay,
+    ) as app:
         app.run()
 
 
