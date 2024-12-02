@@ -138,20 +138,23 @@ class Simulator(can.Listener):
     _sequence_flags: int
 
     def __init__(
-        self,
-        app: Application,
-        *,
-        pistol_index: int,
-        ccs_authorisation_duration: float = 3,
-        ccs_authorisation_success: bool = True,
-        charge_parameters_negotiation_duration: float = 1.5,
-        power_modules_wake_up_duration: float = 1,
-        power_modules_dead_time: float = 1,
-        voltage_ramp_up_slope: float = 200,
-        voltage_ramp_down_slope: float = 100,
-        current_ramp_up_slope: float = 20,
-        current_ramp_down_slope: float = 20,
-        charge_duration: float = 10,
+            self,
+            app: Application,
+            *,
+            pistol_index: int,
+            ccs_authorisation_duration: float = 3,
+            ccs_authorisation_success: bool = True,
+            charge_parameters_negotiation_duration: float = 1.5,
+            power_modules_wake_up_duration: float = 1,
+            power_modules_dead_time: float = 1,
+            voltage_ramp_up_slope: float = 200,
+            voltage_ramp_down_slope: float = 100,
+            current_ramp_up_slope: float = 20,
+            current_ramp_down_slope: float = 20,
+            charge_duration: float = 10,
+            maximum_voltage: float = 500,
+            maximum_charge_current: float = 120,
+            maximum_discharge_current: float = 120,
     ) -> None:
         self._app = app
         self._bus = app.bus
@@ -172,6 +175,10 @@ class Simulator(can.Listener):
             current_ramp_down_slope,
             update_dt=0.1,
         )
+        self._maximum_voltage: float = maximum_voltage
+        self._maximum_charge_current: float = maximum_charge_current
+        self._maximum_discharge_current: float = maximum_discharge_current
+        self._dynamic_target_current: float = 0
 
         # Initialise internal states
         # Those assigned here are meant to be initialised once.
@@ -203,6 +210,18 @@ class Simulator(can.Listener):
             self._power_modules_status_msg,
             period=0.1,
             modifier_callback=self._send_callback_power_modules_status,
+        )
+
+        # DC_Power_Parameters
+        self._dc_power_parameters_msg = can.Message(
+            arbitration_id=FrameID.DC_Power_Parameters.for_pistol(self._pistol_index),
+            is_extended_id=True,
+            data=self.encode_dc_power_parameters(),
+        )
+        self._power_modules_status_task = self._bus.send_periodic(
+            self._dc_power_parameters_msg,
+            period=0.1,
+            modifier_callback=self._send_callback_dc_power_parameters,
         )
 
     def start(self) -> None:
@@ -291,6 +310,9 @@ class Simulator(can.Listener):
         elif msg.arbitration_id == FrameID.Sequence_Control.for_pistol(self._pistol_index):
             self.decode_sequence_control(msg.data)
 
+        elif msg.arbitration_id == FrameID.OCPP_Control.for_pistol(self._pistol_index):
+            self.decode_ocpp_control(msg.data)
+
     def update_state(self, new_state: ControllerState) -> None:
         """Uses [0x6B000] Advantics_Controller_Status.State to sequence non-powered things"""
 
@@ -303,7 +325,7 @@ class Simulator(can.Listener):
                     self.send_sequence_control()
 
             case ControllerState.Waiting_For_PEV:
-                # This indicate we terminated a charge session (or controller just started).
+                # This indicates we terminated a charge session (or controller just started).
                 # Use it to reset our internal states.
                 self.reset()
                 print('--------------------------------------')
@@ -337,6 +359,10 @@ class Simulator(can.Listener):
                     )
 
             case ControllerState.Charging:
+                # Fall back to charging at max current in the beginning of charging every time.
+                # To be overridden by OCPP if wanted.
+                self._dynamic_target_current = self.current_range_max
+                print(f'Update dynamic target current as {self._dynamic_target_current}')
                 # To end the simulation after a set time
                 call_later(self.simulate_normal_charge_stop, self._charge_duration)
 
@@ -348,7 +374,7 @@ class Simulator(can.Listener):
 
         if self._ccs_authorisation_success:
             self.sequence_flags |= (
-                SequenceFlags.CCS_Authorisation_Done | SequenceFlags.CCS_Authorisation_Valid
+                    SequenceFlags.CCS_Authorisation_Done | SequenceFlags.CCS_Authorisation_Valid
             )
             print('User is authorised to charge')
         else:
@@ -446,11 +472,13 @@ class Simulator(can.Listener):
 
         self.present_current = 0
         if (
-            self.lower_output_voltage
-            and (self.present_voltage > 0)
-            and self._ramps_simulator.target_voltage != 0
+                self.lower_output_voltage
+                and (self.present_voltage > 0)
+                and self._ramps_simulator.target_voltage != 0
         ):
             print('Lowering output voltage...')
+            # Set the target_current to zero to avoid the ramp sim from ramping back up to target from 0A
+            self._ramps_simulator.set_target_current(0)
             self._ramps_simulator.set_target_voltage(0, reached_cb=_0v_reached)
 
     def handle_insulation_test(self) -> None:
@@ -523,7 +551,12 @@ class Simulator(can.Listener):
         WARNING: The vehicle might not necessarily ramp up or down its requests.
         """
 
-        target_current = self.current_range_max
+        # if in range_mode, get the target setpoint from _dynamic_target_current
+        if self.setpoints_mode == SetpointsMode.Range_Mode:
+            target_current = self._cap(self._dynamic_target_current, self.current_range_min, self.current_range_max)
+        else:
+            # Simple unidirectional power delivery on maximum current
+            target_current = self.current_range_max
 
         def _charging_current_reached() -> bool:
             print(f'Current setpoint {target_current:.1f} A reached')
@@ -592,6 +625,10 @@ class Simulator(can.Listener):
     # ADM_CS_SECC_Inputs
 
     # OCPP_Control
+    def decode_ocpp_control(self, data: bytes | bytearray) -> None:
+        (dynamic_target_current,) = struct.unpack('<h', data)
+        self._dynamic_target_current = dynamic_target_current / 10
+        print(f'Update dynamic target current as {self._dynamic_target_current}')
 
     # Power_Modules_Status
 
@@ -630,6 +667,20 @@ class Simulator(can.Listener):
         msg.data = self.encode_power_modules_status()
 
     # DC_Power_Parameters
+
+    def encode_dc_power_parameters(self) -> bytes:
+        return struct.pack(
+            '<HHHh',
+            self._cap(round(self._maximum_voltage * 10), 0, 65535),
+            self._cap(round(self._maximum_charge_current * 10), 0, 65535),
+            self._cap(round(self._maximum_discharge_current * 10), 0, 65535),
+            0,
+        )
+
+    def _send_callback_dc_power_parameters(self, msg: can.Message) -> None:
+        """Callback provided to self._bus.send_periodic() for automatic update
+        of message content"""
+        msg.data = self.encode_dc_power_parameters()
 
     # Sequence_Control
 
@@ -675,13 +726,13 @@ def call_later(callback: Callable[[], None], dt: float) -> Thread | None:
 
 class RampSimulator:
     def __init__(
-        self,
-        simulator: Simulator,
-        voltage_ramp_up: float,
-        voltage_ramp_down: float,
-        current_ramp_up: float,
-        current_ramp_down: float,
-        update_dt: float = 0.1,
+            self,
+            simulator: Simulator,
+            voltage_ramp_up: float,
+            voltage_ramp_down: float,
+            current_ramp_up: float,
+            current_ramp_down: float,
+            update_dt: float = 0.1,
     ) -> None:
         self._simulator = simulator
         self._update_dt = update_dt
@@ -698,20 +749,20 @@ class RampSimulator:
         self.current_reached_cb: Callable[[], bool | None] | None = None
 
     def set_target_voltage(
-        self,
-        target_voltage: float,
-        reached_cb: Callable[[], bool | None] | None = None,
-        delay: float = 0,
+            self,
+            target_voltage: float,
+            reached_cb: Callable[[], bool | None] | None = None,
+            delay: float = 0,
     ) -> None:
         self.voltage_reached_cb = reached_cb
         self._delay = time.monotonic() + delay
         self.target_voltage = target_voltage
 
     def set_target_current(
-        self,
-        target_current: float,
-        reached_cb: Callable[[], bool | None] | None = None,
-        delay: float = 0,
+            self,
+            target_current: float,
+            reached_cb: Callable[[], bool | None] | None = None,
+            delay: float = 0,
     ) -> None:
         self.current_reached_cb = reached_cb
         self._delay = time.monotonic() + delay
@@ -835,10 +886,10 @@ class Application:
     ###
 
     def __exit__(
-        self,
-        exctype: type[BaseException] | None,
-        excinst: BaseException | None,
-        exctb: TracebackType | None,
+            self,
+            exctype: type[BaseException] | None,
+            excinst: BaseException | None,
+            exctb: TracebackType | None,
     ) -> bool:
         """Exits a with-statement by shutting down the application (incl. closing the bus).
         Does not handle any exception."""
@@ -860,19 +911,22 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = Path('can.conf'),
-    *,
-    pistol_index: int = 1,
-    ccs_authorisation_duration: float = 3,
-    ccs_authorisation_success: bool = True,
-    charge_parameters_negotiation_duration: float = 1.5,
-    power_modules_wake_up_duration: float = 1,
-    power_modules_dead_time: float = 1,
-    voltage_ramp_up_slope: float = 200,
-    voltage_ramp_down_slope: float = 100,
-    current_ramp_up_slope: float = 20,
-    current_ramp_down_slope: float = 20,
-    charge_duration: float = 10,
+        can_config: Path = Path('can.conf'),
+        *,
+        pistol_index: int = 1,
+        ccs_authorisation_duration: float = 3,
+        ccs_authorisation_success: bool = True,
+        charge_parameters_negotiation_duration: float = 1.5,
+        power_modules_wake_up_duration: float = 1,
+        power_modules_dead_time: float = 1,
+        voltage_ramp_up_slope: float = 200,
+        voltage_ramp_down_slope: float = 100,
+        current_ramp_up_slope: float = 20,
+        current_ramp_down_slope: float = 20,
+        charge_duration: float = 10,
+        maximum_voltage: float = 500,
+        maximum_charge_current: float = 120,
+        maximum_discharge_current: float = 120,
 ) -> None:
     """Simulator of power modules compatible with Advantics EVSE Generic CAN interface v3"""
     try:
@@ -882,18 +936,21 @@ def cli_main(
         raise typer.Abort from ex
 
     with Application(
-        bus_config,
-        pistol_index=pistol_index,
-        ccs_authorisation_duration=ccs_authorisation_duration,
-        ccs_authorisation_success=ccs_authorisation_success,
-        charge_parameters_negotiation_duration=charge_parameters_negotiation_duration,
-        power_modules_wake_up_duration=power_modules_wake_up_duration,
-        power_modules_dead_time=power_modules_dead_time,
-        voltage_ramp_up_slope=voltage_ramp_up_slope,
-        voltage_ramp_down_slope=voltage_ramp_down_slope,
-        current_ramp_up_slope=current_ramp_up_slope,
-        current_ramp_down_slope=current_ramp_down_slope,
-        charge_duration=charge_duration,
+            bus_config,
+            pistol_index=pistol_index,
+            ccs_authorisation_duration=ccs_authorisation_duration,
+            ccs_authorisation_success=ccs_authorisation_success,
+            charge_parameters_negotiation_duration=charge_parameters_negotiation_duration,
+            power_modules_wake_up_duration=power_modules_wake_up_duration,
+            power_modules_dead_time=power_modules_dead_time,
+            voltage_ramp_up_slope=voltage_ramp_up_slope,
+            voltage_ramp_down_slope=voltage_ramp_down_slope,
+            current_ramp_up_slope=current_ramp_up_slope,
+            current_ramp_down_slope=current_ramp_down_slope,
+            charge_duration=charge_duration,
+            maximum_voltage=maximum_voltage,
+            maximum_charge_current=maximum_charge_current,
+            maximum_discharge_current=maximum_discharge_current,
     ) as app:
         app.run()
 
