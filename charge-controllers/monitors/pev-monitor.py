@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+from datetime import datetime
 
 # Third-party imports
 import can
@@ -88,6 +89,25 @@ class VehicleStatus:
     dc_normal_end_of_charge: str
     dc_battery_voltage: float
     dc_inlet_voltage: float
+
+
+enable_can_log = False
+logged_messages = {}
+log_filename = f"./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"
+
+
+def log_can_msg(msg_name, signals, senders=None):
+    if not enable_can_log:
+        return
+
+    if msg_name in logged_messages:
+        if logged_messages[msg_name] == signals:
+            # The same message is logged with the same body last time, do not repeat
+            return
+
+    with open(log_filename, 'a') as file:
+        file.write(f"{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n")
+    logged_messages[msg_name] = signals
 
 
 class AdvanticsPEVInterfaceV2(can.Listener):
@@ -172,6 +192,8 @@ class AdvanticsPEVInterfaceV2(can.Listener):
         except KeyError:
             return
         signals = message.decode(msg.data)
+
+        log_can_msg(message.name, signals, message.senders)
 
         # Messages sent by the controller
 
@@ -273,7 +295,7 @@ class RenderableConsole(Console):
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         texts = self.export_text(clear=False).split('\n')
-        yield from texts[-options.height :]
+        yield from texts[-options.height:]
 
 
 class Application:
@@ -348,10 +370,10 @@ class Application:
         return self
 
     def __exit__(
-        self,
-        exctype: type[BaseException] | None,
-        excinst: BaseException | None,
-        exctb: TracebackType | None,
+            self,
+            exctype: type[BaseException] | None,
+            excinst: BaseException | None,
+            exctb: TracebackType | None,
     ) -> bool:
         self.shutdown()
         return False
@@ -461,8 +483,11 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = Path('can.conf'),
+        can_config: Path = Path('can.conf'),
+        enable_can_logging: bool = False
 ) -> None:
+    global enable_can_log
+    enable_can_log = enable_can_logging
     try:
         bus_config = can.util.load_config(path=can_config)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
