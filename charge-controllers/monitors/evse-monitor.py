@@ -13,6 +13,7 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+from datetime import datetime
 
 # Third-party imports
 import asciichartpy
@@ -103,6 +104,25 @@ class VehicleStatus:
     max_discharge_current: float
     min_discharge_power: int
     max_discharge_power: int
+
+
+enable_can_log = False
+logged_messages = {}
+log_filename = f"./evse_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"
+
+
+def log_can_msg(msg_name, signals, senders=None):
+    if not enable_can_log:
+        return
+
+    if msg_name in logged_messages:
+        if logged_messages[msg_name] == signals:
+            # The same message is logged with the same body last time, do not repeat
+            return
+
+    with open(log_filename, 'a') as file:
+        file.write(f"{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n")
+    logged_messages[msg_name] = signals
 
 
 class AdvanticsEVSEInterfaceV3(can.Listener):
@@ -199,6 +219,8 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         except KeyError:
             return
         signals = message.decode(msg.data)
+
+        log_can_msg(message.name, signals, message.senders)
 
         # Messages sent by the controller
 
@@ -356,17 +378,17 @@ class RenderableConsole(Console):
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         texts = self.export_text(clear=False).split('\n')
-        yield from texts[-options.height :]
+        yield from texts[-options.height:]
 
 
 class PlotPanel:
     def __init__(
-        self,
-        app: Application,
-        kind: str,
-        unit: str,
-        color: str = '',
-        ratio: int = 2,
+            self,
+            app: Application,
+            kind: str,
+            unit: str,
+            color: str = '',
+            ratio: int = 2,
     ) -> None:
         self._app = app
         self._data: deque[float] = deque(maxlen=500)
@@ -516,10 +538,10 @@ class Application:
         return self
 
     def __exit__(
-        self,
-        exctype: type[BaseException] | None,
-        excinst: BaseException | None,
-        exctb: TracebackType | None,
+            self,
+            exctype: type[BaseException] | None,
+            excinst: BaseException | None,
+            exctb: TracebackType | None,
     ) -> bool:
         self.shutdown()
         return False
@@ -634,12 +656,12 @@ class Application:
         self.layout['First']['vehicle-status'].update(Panel(table, title='Vehicle Status'))
 
     def update_wait_on(  # noqa: C901, PLR0912, PLR0915
-        self,
-        charger_control: ChargerControl,
-        charger_status: ChargerStatus,
-        charger_parameters: ChargerParameters,
-        session_status: SessionStatus,
-        vehicle_status: VehicleStatus,
+            self,
+            charger_control: ChargerControl,
+            charger_status: ChargerStatus,
+            charger_parameters: ChargerParameters,
+            session_status: SessionStatus,
+            vehicle_status: VehicleStatus,
     ) -> None:
         def _update_status(text: str) -> None:
             self.layout['Hints'].update(Text(text, style='black on white'))
@@ -772,11 +794,7 @@ class Application:
 
                 if charger_control.setpoints_mode == 'Target_Mode':
                     target_current = charger_control.current_range_max
-                    if (
-                        (target_current * 0.8)
-                        <= charger_status.present_current
-                        <= (target_current * 1.1)
-                    ):
+                    if (target_current * 0.8) <= charger_status.present_current <= (target_current * 1.1):
                         _update_status(f'{direction}! Waiting for charge to stop.')
                     else:
                         _update_status(
@@ -858,9 +876,12 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = Path('can.conf'),
-    pistol_index: int = 1,
+        can_config: Path = Path('can.conf'),
+        pistol_index: int = 1,
+        enable_can_logging: bool = False
 ) -> None:
+    global enable_can_log
+    enable_can_log = enable_can_logging
     try:
         bus_config = can.util.load_config(path=can_config)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
