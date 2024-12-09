@@ -117,11 +117,17 @@ class Simulator(can.Listener):
     command_close_contactors: bool
 
     def __init__(
-        self,
-        app: Application,
-        charger_dead_time: float = 1,
-        charger_voltage_ramp_up_slope: float = 200,
-        contactors_delay: float = 0.6,
+            self,
+            app: Application,
+            charger_dead_time: float = 1,
+            charger_voltage_ramp_up_slope: float = 200,
+            contactors_delay: float = 0.6,
+            maximum_energy_request: float = 75.530,  # 100%
+            target_energy_request: float = 60.424,  # 80%
+            minimum_energy_request: float = 22.659,  # 30%
+            maximum_v2x_energy_request: float = 60.424,  # 80%
+            minimum_v2x_energy_request: float = 22.659,  # 30%
+            departure_time: int = 86400 # 24h in s
     ) -> None:
         self._app = app
         self._bus = app.bus
@@ -130,6 +136,12 @@ class Simulator(can.Listener):
         self._charger_dead_time = charger_dead_time
         self._charger_voltage_ramp_up_slope = charger_voltage_ramp_up_slope
         self._contactors_delay = contactors_delay
+        self._maximum_energy_request: float = maximum_energy_request
+        self._target_energy_request: float = target_energy_request
+        self._minimum_energy_request: float = minimum_energy_request
+        self._maximum_v2x_energy_request: float = maximum_v2x_energy_request
+        self._minimum_v2x_energy_request: float = minimum_v2x_energy_request
+        self._departure_time: int = departure_time
 
         # Initialise internal states
         self._slope_start_voltage = 0
@@ -178,12 +190,48 @@ class Simulator(can.Listener):
             modifier_callback=self._send_callback_dc_status2,
         )
 
+        # EV_Energy_Request
+        self._ev_energy_request_msg = can.Message(
+            arbitration_id=FrameID.EV_Energy_Request,
+            is_extended_id=False,
+            data=self.encode_ev_energy_request(),
+        )
+        self._ev_energy_request_task = self._bus.send_periodic(
+            self._ev_energy_request_msg,
+            period=0.1,
+            modifier_callback=self._send_callback_ev_energy_request,
+        )
+
+        # EV_V2X_Energy_Request
+        self._ev_v2x_energy_request_msg = can.Message(
+            arbitration_id=FrameID.EV_V2X_Energy_Request,
+            is_extended_id=False,
+            data=self.encode_ev_v2x_energy_request(),
+        )
+        self._ev_energy_request_task = self._bus.send_periodic(
+            self._ev_v2x_energy_request_msg,
+            period=0.1,
+            modifier_callback=self._send_callback_ev_v2x_energy_request,
+        )
+
+        # EV_Extra_BPT_Information
+        self._ev_extra_bpt_information_msg = can.Message(
+            arbitration_id=FrameID.EV_Extra_BPT_Information,
+            is_extended_id=False,
+            data=self.encode_ev_extra_bpt_information(),
+        )
+        self._ev_energy_request_task = self._bus.send_periodic(
+            self._ev_extra_bpt_information_msg,
+            period=0.1,
+            modifier_callback=self._send_callback_ev_extra_bpt_information,
+        )
+
     # Internal states
 
     def reset(self) -> None:
         """Reset our internal states"""
         self.ev_soc = 30
-        self.ev_energy_capacity = 75.525
+        self.ev_energy_capacity = 75.530
         self.ev_ac_ready = False
         self.ev_dc_battery_voltage = 330
         self.ev_dc_inlet_voltage = 0
@@ -238,14 +286,14 @@ class Simulator(can.Listener):
         elif msg.arbitration_id == FrameID.DC_Status2:
             self.decode_dc_status2(msg.data)
 
-        # elif msg.arbitration_id == FrameID.EV_Energy_Request:
-        #     self.decode_ev_energy_request(msg.data)
+        elif msg.arbitration_id == FrameID.EV_Energy_Request:
+            self.decode_ev_energy_request(msg.data)
 
-        # elif msg.arbitration_id == FrameID.EV_V2X_Energy_Request:
-        #     self.decode_ev_v2x_energy_request(msg.data)
+        elif msg.arbitration_id == FrameID.EV_V2X_Energy_Request:
+            self.decode_ev_v2x_energy_request(msg.data)
 
-        # elif msg.arbitration_id == FrameID.EV_Extra_BPT_Information:
-        #     self.decode_ev_extra_bpt_information(msg.data)
+        elif msg.arbitration_id == FrameID.EV_Extra_BPT_Information:
+            self.decode_ev_extra_bpt_information(msg.data)
 
     def update_state(self) -> None:
         match self.session_stage:
@@ -258,8 +306,8 @@ class Simulator(can.Listener):
                 print(f'Inlet voltage ramping up to {self.ev_dc_battery_voltage:.1f} V...')
                 self._slope_start_voltage = self.ev_dc_inlet_voltage
                 total_time = self._charger_dead_time + (
-                    (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
-                    / self._charger_voltage_ramp_up_slope
+                        (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
+                        / self._charger_voltage_ramp_up_slope
                 )
                 subdivide_dt(self.simulate_precharge, total_time, 0.1)
 
@@ -418,6 +466,61 @@ class Simulator(can.Listener):
         of message content"""
         msg.data = self.encode_dc_status2()
 
+    # EV_Energy_Request
+
+    def encode_ev_energy_request(self) -> bytes:
+        return struct.pack(
+            '<HHH',
+            self._cap(round(self._target_energy_request * 100), 0, 65535),
+            self._cap(round(self._minimum_energy_request * 100), 0, 65535),
+            self._cap(round(self._maximum_energy_request * 100), 0, 65535),
+        )
+
+    def decode_ev_energy_request(self, data: bytes | bytearray) -> None:
+        target_energy_request, minimum_energy_request, maximum_energy_request = struct.unpack('<HHH', data)
+        self._target_energy_request = target_energy_request / 100
+        self._minimum_energy_request = minimum_energy_request / 100
+        self._maximum_energy_request = maximum_energy_request / 100
+
+    def _send_callback_ev_energy_request(self, msg: can.Message) -> None:
+        """Callback provided to self._bus.send_periodic() for automatic update of message content"""
+        msg.data = self.encode_ev_energy_request()
+
+    # EV_V2X_Energy_Request
+
+    def encode_ev_v2x_energy_request(self) -> bytes:
+        return struct.pack(
+            '<HH',
+            self._cap(round(self._minimum_v2x_energy_request * 100), 0, 65535),
+            self._cap(round(self._maximum_v2x_energy_request * 100), 0, 65535),
+        )
+
+    def decode_ev_v2x_energy_request(self, data: bytes | bytearray) -> None:
+        minimum_v2x_energy_request, maximum_v2x_energy_request = struct.unpack('<HH', data)
+
+        self._minimum_v2x_energy_request = minimum_v2x_energy_request / 100
+        self._maximum_v2x_energy_request = maximum_v2x_energy_request / 100
+
+    def _send_callback_ev_v2x_energy_request(self, msg: can.Message) -> None:
+        """Callback provided to self._bus.send_periodic() for automatic update of message content"""
+        msg.data = self.encode_ev_v2x_energy_request()
+
+    # EV_Extra_BPT_Information
+
+    def encode_ev_extra_bpt_information(self) -> bytes:
+        return struct.pack(
+            '<I',
+            self._cap(round(self._departure_time), 0, 4294967296),
+        )
+
+    def decode_ev_extra_bpt_information(self, data: bytes | bytearray) -> None:
+        (departure_time,) = struct.unpack('<I', data)
+        self._departure_time = departure_time
+
+    def _send_callback_ev_extra_bpt_information(self, msg: can.Message) -> None:
+        """Callback provided to self._bus.send_periodic() for automatic update of message content"""
+        msg.data = self.encode_ev_extra_bpt_information()
+
 
 # Wrappers around threads to implement simulated behaviours
 
@@ -532,10 +635,10 @@ class Application:
     ###
 
     def __exit__(
-        self,
-        exctype: type[BaseException] | None,
-        excinst: BaseException | None,
-        exctb: TracebackType | None,
+            self,
+            exctype: type[BaseException] | None,
+            excinst: BaseException | None,
+            exctb: TracebackType | None,
     ) -> bool:
         """Exits a with-statement by shutting down the application (incl. closing the bus).
         Does not handle any exception."""
@@ -561,6 +664,12 @@ def cli_main(
         charger_dead_time: float = 1,
         charger_voltage_ramp_up_slope: float = 200,
         contactors_delay: float = 0.6,
+        maximum_energy_request: float = 75.530,  # 100%
+        target_energy_request: float = 60.424,  # 80%
+        minimum_energy_request: float = 22.659,  # 30%
+        maximum_v2x_energy_request: float = 60.424,  # 80%
+        minimum_v2x_energy_request: float = 22.659,  # 30%
+        departure_time: int = 86400,  # 24h in s
 ) -> None:
     """Simulator of BMS/vehicle side compatible with Advantics PEV Generic CAN interface v2"""
     try:
@@ -574,6 +683,12 @@ def cli_main(
             charger_dead_time=charger_dead_time,
             charger_voltage_ramp_up_slope=charger_voltage_ramp_up_slope,
             contactors_delay=contactors_delay,
+            maximum_energy_request = maximum_energy_request,
+            target_energy_request = target_energy_request,
+            minimum_energy_request = minimum_energy_request,
+            maximum_v2x_energy_request = maximum_v2x_energy_request,
+            minimum_v2x_energy_request = minimum_v2x_energy_request,
+            departure_time = departure_time,
     ) as app:
         app.run()
 
