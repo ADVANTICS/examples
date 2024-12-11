@@ -39,7 +39,7 @@ The `evse-monitor.py` and the `pev-monitor.py` are CLI tools that provide inform
 ### Required Hardware
 * [ADM-CS-SECC](https://store.advantics.fr/charge-controllers/23-charge-station-controller.html) (Referred as "SECC" from now on)
 * [ADM-CS-EVCC](https://store.advantics.fr/charge-controllers/24-12-ev-charge-controller-ccs.html) (Referred as "EVCC" from now on)
-* [USB-CAN Adapter](https://store.advantics.fr/adapters/37-can-cable-set-with-24v-power-supply.html)
+* USB-CAN Adapter (`python-can` Documentation: [Supported Hardware Interfaces](https://python-can.readthedocs.io/en/stable/interfaces.html), this guide uses [PEAK CAN adapter](https://store.advantics.fr/adapters/37-can-cable-set-with-24v-power-supply.html))
 
 The connections between the EVCC, SECC and the PC are as shown below. The controller pins that are not connected are not shown in the diagram, for the full pinout and the physical layout please refer to [SECC documentation](https://advantics.github.io/documentation/#/charge-controllers/ADM-CS-SECC/introduction) and [EVCC documentation](https://advantics.github.io/documentation/#/charge-controllers/ADM-CS-EVCC/interfaces).
 
@@ -53,7 +53,9 @@ Please power up the controllers only after the connections are done and leave th
 
 ## Software Setup
 
-The test system used in this guide runs Python 3.12 on Ubuntu 24.04 with PEAK USB CAN Adapter. The required pip packages of each module is listed in the `requirements.txt` in the same directory.  
+The test system used in this guide runs Python on Linux. The required pip packages of each module is listed in the `requirements.txt` in the same directory.  
+
+Unfortunately there is no Windows support due to technical constraints between Windows and CAN interface. Running the examples on a Linux virtual machine on Windows is the proposed solution for now.
 
 Install the needed `apt` packages, clone this repository, create a virtual environment and install the requirements:
 ```shell
