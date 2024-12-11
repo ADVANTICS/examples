@@ -8,8 +8,8 @@
   * [Update EVSE Config](#update-evse-config)
   * [Update PEV Config](#update-pev-config)
   * [Run a Power Transfer Session](#run-a-power-transfer-session)
-  * [[TODO] OCPP Integration](#todo-ocpp-integration)
-  * [[TODO] Next Steps](#todo-next-steps)
+  * [OCPP Integration](#ocpp-integration)
+  * [Useful Resources](#useful-resources)
 <!-- TOC -->
 
 ## Overview
@@ -180,7 +180,38 @@ At this point, the session can be started by connecting the CP lines together. E
 ADVANTICS Docs: [Sequence for EVSE Generic Interface v3](https://advantics.github.io/documentation/#/charge-controllers/secc_generic/sequences_v3) 
 ADVANTICS Docs: [Sequence for PEV Generic Interface v2](https://advantics.github.io/documentation/#/charge-controllers/evcc_generic/sequences_v2) 
 
-## [TODO] OCPP Integration
+## OCPP Integration
 
-## [TODO] Next Steps
+An OCPP server is needed for using the OCPP integration feature of the SECC. In this guide [SteVe](https://github.com/steve-community/steve) is being used. Please follow the installation guide on the official SteVe repo. Currently, **OCPP-1.6J** version is supported by ADM-CS-SECC, please ensure that the selected SteVe version supports it. Docker-compose installation is recommended for fast and convenient setup.
 
+After setting it up, the SteVe web interface should be accessible from `http://localhost:8180` with the configured credentials. To integrate an SECC to SteVe, a charging point should be created on SteVe: 
+1. Navigate to `Number of Charge Points` on the main page and click `Add New`
+2. Give the charging point a ChargeBox ID (`0001` e.g.), `Registration status: Accepted`, fill the necessary fields.
+3. Then copy/note the SteVe websocket link with the ChargeBox ID that is created on the last step at the end of it. Can be found in the `About` tab of the web interface. (Should look like this: `ws://<SteVe Server IP Address>/steve/websocket/CentralSystemService/<ChargeBox ID>`)
+4. Navigate to the SECC config (`ssh root@192.168.1.51` `nano /srv/config.cfg`) and update the following fields:
+    ```
+   [ocpp]
+    enabled = true
+    connection_url = ws://192.168.1.___/steve/websocket/CentralSystemService/0001
+   ```
+5. Restart the EVSE software for the new config to take effect:
+    ```
+    /etc/init.d/S80charger restart
+    ```
+6. The connected SECC should be listed under `Number of Connected JSON Charge Points > 1.6` as seen below.
+![SteVe](doc_resources/SteVe.png)
+7. While a power transfer is ongoing on an OCPP-enabled SECC, it's possible to send a target current as a custom configuration key (Under `Operations` → `OCPP 1.6` → `Change Configuration`). If the charging standard and the limits allow, this set point can be negative to trigger a vehicle discharge. After sending the message, the response (accept/reject) from the SECC will be shown on the web interface.
+![Steve](doc_resources/steve_set_target_current.png)
+
+## Useful Resources
+SECC:
+* ADM-CS-SECC Documentation: https://advantics.github.io/documentation/#/charge-controllers/ADM-CS-SECC/introduction
+* ADVANTICS OCPP Application Doc: https://advantics.github.io/documentation/#/charge-controllers/ocpp16j
+
+EVCC:
+* ADM-CS-EVCC Documentation: https://advantics.github.io/documentation/#/charge-controllers/ADM-CS-EVCC/introduction
+
+Linux System:
+* ADVANTICS Linux System User Guide: https://advantics.github.io/documentation/#/charge-controllers/sys3_user/README
+* Read-Only File System: https://advantics.github.io/documentation/#/charge-controllers/sys3_user/read-only
+* Debugging: https://advantics.github.io/documentation/#/charge-controllers/sys3_user/debugging
