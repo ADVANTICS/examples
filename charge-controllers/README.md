@@ -1,28 +1,28 @@
 <!-- TOC -->
-  * [Overview](#overview-)
-  * [Typical Real System](#typical-real-system-)
-  * [The Simulated System](#the-simulated-system-)
-  * [Hardware Setup](#hardware-setup-)
+  * [Overview](#overview)
+  * [Typical Real System](#typical-real-system)
+  * [The Simulated System](#the-simulated-system)
+  * [Hardware Setup](#hardware-setup)
     * [Required Hardware](#required-hardware)
-  * [Software Setup](#software-setup-)
-  * [Update EVSE Config](#update-evse-config-)
-  * [Update PEV Config](#update-pev-config-)
+  * [Software Setup](#software-setup)
+  * [Update EVSE Config](#update-evse-config)
+  * [Update PEV Config](#update-pev-config)
   * [Run a Power Transfer Session](#run-a-power-transfer-session)
-  * [[TODO] OCPP Integration](#todo-ocpp-integration-)
+  * [[TODO] OCPP Integration](#todo-ocpp-integration)
   * [[TODO] Next Steps](#todo-next-steps)
 <!-- TOC -->
 
-## Overview 
+## Overview
 
 The aim of this repository is to provide examples for customer controller implementation for both EVSE and PEV side while allowing user to simulate a simplified test environment.
 
-## Typical Real System  
+## Typical Real System
 
 On both EVSE and PEV sides, the controller hardware with the charge controller software are provided by ADVANTICS. From the customer software perspective, the core responsibility of the ADVANTICS controller software on each side is to ensure the communication between PEV and EVSE is executed in compliance with the charging standards. In addition to these, a CAN interface to interact with the controller software is provided. The real system can be described as below in a very simplified manner. The responsibility of the customer software on each side is to act as the communication bridge between the generic interface and the selected EVSE/PEV power electronics. Both ADM-CS-SECC and ADM-CS-EVCC can accommodate these customer implementations. 
 
 ![Typical Real System](doc_resources/examples_real_sys.png)
 
-## The Simulated System  
+## The Simulated System
 
 The examples in this repo provide a simulated power stack on each side to observe and experiment with the system without needing the real power electronics. The example implementations can be used as a starting point for implementing the real customer controllers. It can be achieved by replacing the simulated parts by actual communication with the corresponding power modules.
 
@@ -34,7 +34,7 @@ The `evse-monitor.py` and the `pev-monitor.py` are CLI tools that provide inform
 ![EVSE Monitor](doc_resources/evse_monitor.png)  
 ![PEV Monitor](doc_resources/pev_monitor.png)
 
-## Hardware Setup  
+## Hardware Setup
 
 ### Required Hardware
 * [ADM-CS-SECC](https://store.advantics.fr/charge-controllers/23-charge-station-controller.html) (Referred as "SECC" from now on)
@@ -51,7 +51,7 @@ In a typical real system, the EVSE and PEV are not on the same CAN bus. Since we
 
 Please power up the controllers only after the connections are done and leave the CP line disconnected until everything is ready to run a power transfer session.
 
-## Software Setup  
+## Software Setup
 
 The test system used in this guide runs Python 3.12 on Ubuntu 24.04 with PEAK USB CAN Adapter. The required pip packages of each module is listed in the `requirements.txt` in the same directory.  
 
@@ -82,7 +82,7 @@ sudo ip link set can0 up type can bitrate 500000
 ```
 
 
-## Update EVSE Config  
+## Update EVSE Config
 The EVSE (SECC) will take the IP address `192.168.1.51`, the config file is under `/srv/config.cfg`. To update the config, in the same network:
 ```shell
 ssh root@192.168.1.51
@@ -112,7 +112,7 @@ Restart the controller software for the new config to take effect:
 /etc/init.d/S80charger restart-clean
 ```
 
-## Update PEV Config  
+## Update PEV Config
 The PEV (EVCC) will take the IP address `192.168.1.49`, the config file is under `/srv/config.cfg`. To update the config, in the same network:
 ```shell
 ssh root@192.168.1.49
@@ -180,7 +180,7 @@ At this point, the session can be started by connecting the CP lines together. E
 ADVANTICS Docs: [Sequence for EVSE Generic Interface v3](https://advantics.github.io/documentation/#/charge-controllers/secc_generic/sequences_v3) 
 ADVANTICS Docs: [Sequence for PEV Generic Interface v2](https://advantics.github.io/documentation/#/charge-controllers/evcc_generic/sequences_v2) 
 
-## [TODO] OCPP Integration  
+## [TODO] OCPP Integration
 
 ## [TODO] Next Steps
 
