@@ -495,7 +495,6 @@ class Simulator(can.Listener):
         """
 
         def _insulation_voltage_reached() -> bool:
-            self.insulation_resistance = 100
             print(f'Voltage raised to {self.target_voltage:.1f} V')
             return True
 
@@ -504,6 +503,7 @@ class Simulator(can.Listener):
             self._insulation_test_start_at = now
             print(f'Ramping voltage to {self.target_voltage:.1f} V...')
 
+        self.insulation_resistance = 100
         self._ramps_simulator.set_target_voltage(
             self.target_voltage,
             reached_cb=_insulation_voltage_reached,
