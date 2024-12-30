@@ -95,8 +95,8 @@ python3 -m venv venv
 source venv/bin/activate
 
 pip install -r charge-controllers/monitors/requirements.txt
-pip install -r charge-controllers/tutorials/EVSE Generic Interface v3/requirements.txt
-pip install -r charge-controllers/tutorials/PEV Generic Interface v2/requirements.txt
+pip install -r "charge-controllers/tutorials/EVSE Generic Interface v3/requirements.txt"
+pip install -r "charge-controllers/tutorials/PEV Generic Interface v2/requirements.txt"
 ```
 
 If you use a PEAK USB CAN
