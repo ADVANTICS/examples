@@ -230,6 +230,16 @@ cd charge-controllers/monitors
 python3 pev-monitor.py
 ```
 
+Note that the default CAN config (`can.conf`) will run on channel `can0`. You can pass you custom can config using `--can-config` flag. If you want to use virtual CAN instead (e.g., for preliminary tests), there is a `vcan.conf` that you can use directly, e.g.:
+
+```shell
+cd charge-controllers/tutorials/EVSE\ Generic\ Interface\ v3
+python3 evse-simulator.py --can-config vcan.conf
+```
+
+If you are unsure about how to set up a virtual CAN interface you can check the corresponding socketcan documentation [here](https://netmodule-linux.readthedocs.io/en/latest/howto/can.html).
+
+
 > **NOTE:** Each module is connecting to CAN interface on start and closes it gracefully when CTRL+C arrives from the
 > user, pressing CTRL+C repetitively or killing the process will cause CAN interface to close abruptly and make it **
 > DOWN
