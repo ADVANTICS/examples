@@ -23,17 +23,31 @@ that supports the same charging standards on the other side.
 ### On your machine
 
 You can install this utility globally on your machine using pipx:
+
+**Simulation tools**
 ```
 pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/tutorials"
+```
+**Monitoring tools**
+```
+pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
 ```
 You will then be able to call the simulation utilities in command line from anywhere on your system.<br>
 If you would rather install it in a virtual environement, you can use `pip` once your virtual environement is activated instead. IN that case, the simulation commands will be only callable when your virtual environement is actived.
 
 ### On the controllers
 You can install this package with pip (`pipx` is not available on controllers):
+
+**Simulation tools**
+
 ```
 pip install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/tutorials"
 ```
+**Monitoring tools**
+```
+pip install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
+```
+
 
 ## Typical Real System
 
