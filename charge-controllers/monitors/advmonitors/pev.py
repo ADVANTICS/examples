@@ -41,6 +41,10 @@ CAN_CONFIGS: dict[str, Path] = {
 DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
 DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
 
+CAN_DBS: dict[str, Path] = {
+    path.name: path for path in resources.files('advmonitors.dbs').iterdir()
+}  # type: ignore
+
 
 @dataclass
 class VehicleControl:
@@ -125,7 +129,7 @@ class AdvanticsPEVInterfaceV2(can.Listener):
         self._app = app
         self._bus = app.bus
         self._db: cantools.database.Database = cantools.database.load_file(
-            'Advantics_Generic_PEV_protocol_v2.kcd',
+            CAN_DBS['Advantics_Generic_PEV_protocol_v2.kcd'],
         )  # type: ignore[reportAttributeAccessIssue]
 
         self._bus.set_filters(

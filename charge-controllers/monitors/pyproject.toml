@@ -29,6 +29,7 @@ Homepage = "https://github.com/ADVANTICS/examples"
 packages = ["advmonitors"]
 include = [
   "advmonitors/conf/*.conf",
+  "advmonitors/dbs/*.kcd"
 ]
 
 [project.scripts]

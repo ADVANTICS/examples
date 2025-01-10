@@ -44,6 +44,10 @@ CAN_CONFIGS: dict[str, Path] = {
 DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
 DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
 
+CAN_DBS: dict[str, Path] = {
+    path.name: path for path in resources.files('advmonitors.dbs').iterdir()
+}  # type: ignore
+
 
 @dataclass
 class ChargerControl:
@@ -141,7 +145,7 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         self._bus = app.bus
         self._index = pistol_index
         self._db: cantools.database.Database = cantools.database.load_file(
-            'Advantics_Generic_EVSE_protocol_v3.kcd',
+            CAN_DBS['Advantics_Generic_EVSE_protocol_v3.kcd']
         )  # type: ignore[reportAttributeAccessIssue]
 
         self._bus.set_filters(
