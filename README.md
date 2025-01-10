@@ -19,6 +19,22 @@ while allowing user to simulate a simplified test environment. The structure exp
 controllers on both PEV and EVSE sides. It's possible use an ADVANTICS controller on one side and another controller
 that supports the same charging standards on the other side.
 
+## Install
+### On your machine
+
+You can install this utility globally on your machine using pipx:
+```
+pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/tutorials"
+```
+You will then be able to call the simulation utilities in command line from anywhere on your system.<br>
+If you would rather install it in a virtual environement, you can use `pip` once your virtual environement is activated instead. IN that case, the simulation commands will be only callable when your virtual environement is actived.
+
+### On the controllers
+You can install this package with pip (`pipx` is not available on controllers):
+```
+pip install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/tutorials"
+```
+
 ## Typical Real System
 
 On both EVSE and PEV sides, the controller hardware with the charge controller software are provided by ADVANTICS. From
@@ -77,6 +93,13 @@ is ready to run a power transfer session.
 
 ## Software Setup
 
+> The simplest is to install the project using pip as described in the Install section.
+> However, if you want to run locally without installing the package, you can follow the instructions below.
+
+
+The simplest is to install the project using pip as described in the Install section.
+If you want
+
 The test system used in this guide runs Python on Linux. The required pip packages of each module is listed in the
 `requirements.txt` in the same directory.
 
@@ -95,8 +118,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 pip install -r charge-controllers/monitors/requirements.txt
-pip install -r "charge-controllers/tutorials/EVSE Generic Interface v3/requirements.txt"
-pip install -r "charge-controllers/tutorials/PEV Generic Interface v2/requirements.txt"
+pip install -r charge-controllers/tutorials/requirements.txt
 ```
 
 If you use a PEAK USB CAN
@@ -211,8 +233,8 @@ Assuming the virtual environment of this project is active with all the steps ar
 separate terminal sessions:
 
 ```shell
-cd charge-controllers/tutorials/EVSE\ Generic\ Interface\ v3
-python3 evse-simulator.py
+cd charge-controllers/tutorials
+python3 simulate-generic-evse-v3.py
 ```
 
 ```shell
@@ -221,8 +243,8 @@ python3 evse-monitor.py
 ```
 
 ```shell
-cd charge-controllers/tutorials/PEV\ Generic\ Interface\ v2
-python3 pev-simulator.py
+cd charge-controllers/tutorials/
+python3 simulate-generic-pev-v2.py
 ```
 
 ```shell
@@ -233,8 +255,8 @@ python3 pev-monitor.py
 Note that the default CAN config (`can.conf`) will run on channel `can0`. You can pass you custom can config using `--can-config` flag. If you want to use virtual CAN instead (e.g., for preliminary tests), there is a `vcan.conf` that you can use directly, e.g.:
 
 ```shell
-cd charge-controllers/tutorials/EVSE\ Generic\ Interface\ v3
-python3 evse-simulator.py --can-config vcan.conf
+cd charge-controllers/tutorials/
+python3 simulate-generic-pev-v2.py --can-config vcan.conf
 ```
 
 If you are unsure about how to set up a virtual CAN interface you can check the corresponding socketcan documentation [here](https://netmodule-linux.readthedocs.io/en/latest/howto/can.html).
