@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 
 CAN_CONFIGS: dict[str, Path] = {
-    path.name: path for path in resources.files('advsimulators.conf').iterdir()
+    path.name: path for path in resources.files('advmonitors.conf').iterdir()
 }  # type: ignore
 DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
 DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']

@@ -30,7 +30,7 @@ pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&s
 ```
 **Monitoring tools**
 ```
-pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
+pipx install "advmonitors@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
 ```
 You will then be able to call the simulation utilities in command line from anywhere on your system.<br>
 If you would rather install it in a virtual environement, you can use `pip` once your virtual environement is activated instead. IN that case, the simulation commands will be only callable when your virtual environement is actived.
@@ -45,7 +45,7 @@ pip install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&su
 ```
 **Monitoring tools**
 ```
-pip install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
+pip install "advmonitors@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
 ```
 
 
