@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 # System imports
+from importlib import resources
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,13 @@ if TYPE_CHECKING:
     from typing import Any, Self
 
     from rich.console import ConsoleOptions, RenderResult
+
+
+CAN_CONFIGS: dict[str, Path] = {
+    path.name: path for path in resources.files('advsimulators.conf').iterdir()
+}  # type: ignore
+DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
+DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
 
 
 @dataclass
@@ -93,7 +101,7 @@ class VehicleStatus:
 
 enable_can_log = False
 logged_messages = {}
-log_filename = f"./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"
+log_filename = f'./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
 
 
 def log_can_msg(msg_name, signals, senders=None):
@@ -106,7 +114,9 @@ def log_can_msg(msg_name, signals, senders=None):
             return
 
     with open(log_filename, 'a') as file:
-        file.write(f"{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n")
+        file.write(
+            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n'
+        )
     logged_messages[msg_name] = signals
 
 
@@ -198,7 +208,9 @@ class AdvanticsPEVInterfaceV2(can.Listener):
         # Messages sent by the controller
 
         if message.name == 'EVSE_Information':
-            self.session_status.communication_stage = str(signals['Communication_Stage'])
+            self.session_status.communication_stage = str(
+                signals['Communication_Stage']
+            )
             self.session_status.protocol = str(signals['Protocol'])
             self.session_status.pins = str(signals['Pins'])
             self._app.update_session_status(self.session_status)
@@ -207,7 +219,9 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             self._app.update_charger_status(self.charger_status)
 
         elif message.name == 'AC_Control':
-            self.vehicle_control.ac_evse_is_ready = str(signals['Ready_To_Deliver_Power'])
+            self.vehicle_control.ac_evse_is_ready = str(
+                signals['Ready_To_Deliver_Power']
+            )
             self._app.update_vehicle_control(self.vehicle_control)
 
         elif message.name == 'DC_Control':
@@ -230,15 +244,17 @@ class AdvanticsPEVInterfaceV2(can.Listener):
                 signals['DC_Contactor_Negative_Feedback']
             )
             self.vehicle_control.digital_inputs = (
-                f'1:{"H" if signals['Digital_Input1'] else "L"} '
-                f'2:{"H" if signals['Digital_Input2'] else "L"}'
+                f'1:{"H" if signals["Digital_Input1"] else "L"} '
+                f'2:{"H" if signals["Digital_Input2"] else "L"}'
             )
             self.vehicle_control.stop_charge = str(signals['Stop_Charge'])
             self.vehicle_control.ptc0 = int(signals['PTC0'])
             self.vehicle_control.ptc1 = int(signals['PTC1'])
             self.vehicle_control.ptc2 = int(signals['PTC2'])
             self.vehicle_control.cpu_temp = int(signals['CPU_Temperature'])
-            self.vehicle_control.can_sensor_temp = int(signals['CAN_Sensor_Temperature'])
+            self.vehicle_control.can_sensor_temp = int(
+                signals['CAN_Sensor_Temperature']
+            )
             self._app.update_vehicle_control(self.vehicle_control)
 
         # Do also the messages going to the controller
@@ -260,15 +276,23 @@ class AdvanticsPEVInterfaceV2(can.Listener):
 
         elif message.name == 'DC_Status2':
             self.vehicle_status.dc_contactors_closed = str(signals['Contactors_Closed'])
-            self.vehicle_status.dc_normal_end_of_charge = str(signals['Normal_End_of_Charge'])
+            self.vehicle_status.dc_normal_end_of_charge = str(
+                signals['Normal_End_of_Charge']
+            )
             self.vehicle_status.dc_battery_voltage = float(signals['Battery_Voltage'])
             self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'EV_Energy_Request':
-            self.vehicle_parameters.target_energy_request = float(signals['Target_Energy_Request'])
-            self.vehicle_parameters.min_energy_request = float(signals['Minimum_Energy_Request'])
-            self.vehicle_parameters.max_energy_request = float(signals['Maximum_Energy_Request'])
+            self.vehicle_parameters.target_energy_request = float(
+                signals['Target_Energy_Request']
+            )
+            self.vehicle_parameters.min_energy_request = float(
+                signals['Minimum_Energy_Request']
+            )
+            self.vehicle_parameters.max_energy_request = float(
+                signals['Maximum_Energy_Request']
+            )
             self._app.update_vehicle_parameters(self.vehicle_parameters)
 
         elif message.name == 'EV_V2X_Energy_Request':
@@ -293,13 +317,17 @@ class RenderableConsole(Console):
     def __init__(self) -> None:
         super().__init__(record=True, file=open(os.devnull, 'w'))  # noqa: PTH123, SIM115
 
-    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
         texts = self.export_text(clear=False).split('\n')
-        yield from texts[-options.height:]
+        yield from texts[-options.height :]
 
 
 class Application:
-    def __init__(self, bus_config: can.typechecking.BusConfig, **interface_config: Any) -> None:
+    def __init__(
+        self, bus_config: can.typechecking.BusConfig, **interface_config: Any
+    ) -> None:
         self._bus_config = bus_config
         self._interface_config = interface_config
         self._bus: can.BusABC | None = None
@@ -352,7 +380,9 @@ class Application:
         return notifier
 
     def start(self) -> None:
-        _ = self.notifier  # Implicitly instantiate bus, pev, and notifier, which starts-up
+        _ = (
+            self.notifier
+        )  # Implicitly instantiate bus, pev, and notifier, which starts-up
 
     def shutdown(self) -> None:
         self.live.stop()
@@ -370,10 +400,10 @@ class Application:
         return self
 
     def __exit__(
-            self,
-            exctype: type[BaseException] | None,
-            excinst: BaseException | None,
-            exctb: TracebackType | None,
+        self,
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
     ) -> bool:
         self.shutdown()
         return False
@@ -404,7 +434,9 @@ class Application:
         table.add_row('[b]PTC 2:[/]', f'{data.ptc2} °C')
         table.add_row('[b]CPU temperature:[/]', f'{data.cpu_temp} °C')
         table.add_row('[b]CAN sensor temperature:[/]', f'{data.can_sensor_temp} °C')
-        self.layout['First']['vehicle-control'].update(Panel(table, title='Vehicle Control'))
+        self.layout['First']['vehicle-control'].update(
+            Panel(table, title='Vehicle Control')
+        )
 
     def update_charger_status(self, data: ChargerStatus) -> None:
         table = Table.grid(expand=True)
@@ -416,22 +448,38 @@ class Application:
             '[b]RCD status:[/]',
             self._color_flag(data.rcd_status, not_prefix='No_', invert=True),
         )
-        self.layout['Second']['charger-status'].update(Panel(table, title='Charger Status'))
+        self.layout['Second']['charger-status'].update(
+            Panel(table, title='Charger Status')
+        )
 
     def update_vehicle_parameters(self, data: VehicleParameters) -> None:
         table = Table.grid(expand=True)
         table.box = box.HORIZONTALS
         table.add_column()
         table.add_column()
-        table.add_row('[b]Target energy request:[/]', f'{data.target_energy_request:.2f} kWh')
-        table.add_row('[b]Minimum energy request:[/]', f'{data.min_energy_request:.2f} kWh')
-        table.add_row('[b]Maximum energy request:[/]', f'{data.max_energy_request:.2f} kWh')
+        table.add_row(
+            '[b]Target energy request:[/]', f'{data.target_energy_request:.2f} kWh'
+        )
+        table.add_row(
+            '[b]Minimum energy request:[/]', f'{data.min_energy_request:.2f} kWh'
+        )
+        table.add_row(
+            '[b]Maximum energy request:[/]', f'{data.max_energy_request:.2f} kWh'
+        )
         table.add_section()
-        table.add_row('[b]Minimum V2X energy request:[/]', f'{data.min_v2x_energy_request:.2f} kWh')
-        table.add_row('[b]Maximum V2X energy request:[/]', f'{data.max_v2x_energy_request:.2f} kWh')
+        table.add_row(
+            '[b]Minimum V2X energy request:[/]',
+            f'{data.min_v2x_energy_request:.2f} kWh',
+        )
+        table.add_row(
+            '[b]Maximum V2X energy request:[/]',
+            f'{data.max_v2x_energy_request:.2f} kWh',
+        )
         table.add_section()
         table.add_row('[b]Departure time:[/]', f'{data.departure_time} s')
-        self.layout['Second']['vehicle-parameters'].update(Panel(table, title='Vehicle Parameters'))
+        self.layout['Second']['vehicle-parameters'].update(
+            Panel(table, title='Vehicle Parameters')
+        )
 
     def update_session_status(self, data: SessionStatus) -> None:
         table = Table.grid(expand=True)
@@ -447,7 +495,9 @@ class Application:
         table.add_row('[b]CP state:[/]', data.cp_state)
         table.add_row('[b]PP resistance:[/]', f'{data.pp_resistance} Ω')
         table.add_row('[b]Inlet lock state:[/]', data.inlet_lock_state)
-        self.layout['First']['charge-session'].update(Panel(table, title='Charge Session'))
+        self.layout['First']['charge-session'].update(
+            Panel(table, title='Charge Session')
+        )
 
     def update_vehicle_status(self, data: VehicleStatus) -> None:
         table = Table.grid(expand=True)
@@ -464,13 +514,21 @@ class Application:
         table.add_row('[b]DC contactors closed:[/]', data.dc_contactors_closed)
         table.add_row(
             '[b]DC normal end of charge:[/]',
-            self._color_flag(data.dc_normal_end_of_charge, not_prefix='No_', invert=True),
+            self._color_flag(
+                data.dc_normal_end_of_charge, not_prefix='No_', invert=True
+            ),
         )
         table.add_section()
-        table.add_row('[b]AC vehicle ready:[/]', self._color_flag(data.ac_vehicle_ready))
-        self.layout['First']['vehicle-status'].update(Panel(table, title='Vehicle Status'))
+        table.add_row(
+            '[b]AC vehicle ready:[/]', self._color_flag(data.ac_vehicle_ready)
+        )
+        self.layout['First']['vehicle-status'].update(
+            Panel(table, title='Vehicle Status')
+        )
 
-    def _color_flag(self, flag: str, not_prefix: str = 'Not_', *, invert: bool = False) -> str:
+    def _color_flag(
+        self, flag: str, not_prefix: str = 'Not_', *, invert: bool = False
+    ) -> str:
         if flag == '----':
             return flag
         if flag.startswith(not_prefix) != invert:
@@ -483,8 +541,7 @@ class Application:
 
 
 def cli_main(
-        can_config: Path = Path('can.conf'),
-        enable_can_logging: bool = False
+    can_config: Path = DEFAULT_CAN_CONFIG, enable_can_logging: bool = False
 ) -> None:
     global enable_can_log
     enable_can_log = enable_can_logging
