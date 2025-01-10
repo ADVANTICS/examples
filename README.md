@@ -19,10 +19,10 @@ while allowing user to simulate a simplified test environment. The structure exp
 controllers on both PEV and EVSE sides. It's possible use an ADVANTICS controller on one side and another controller
 that supports the same charging standards on the other side.
 
-## Install
+## Quick Install
 ### On your machine
 
-
+Note: If you do not have a working version of Python3 installed, please refer to the more details section [Software Setup](#software-setup) below.
 You can install this utility globally on your machine using pipx:
 
 **Simulation tools**
