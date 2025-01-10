@@ -1,0 +1,2 @@
+python-can >= 4.4.2
+typer ~= 0.12.0
