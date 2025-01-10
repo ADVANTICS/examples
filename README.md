@@ -22,6 +22,7 @@ that supports the same charging standards on the other side.
 ## Install
 ### On your machine
 
+
 You can install this utility globally on your machine using pipx:
 
 **Simulation tools**
@@ -33,7 +34,7 @@ pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&s
 pipx install "advmonitors@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
 ```
 You will then be able to call the simulation utilities in command line from anywhere on your system.<br>
-If you would rather install it in a virtual environement, you can use `pip` once your virtual environement is activated instead. IN that case, the simulation commands will be only callable when your virtual environement is actived.
+If you would rather install it in a virtual environement, you can use `pip` once your virtual environement is activated instead. In that case, the simulation commands will be only callable when your virtual environement is actived.
 
 ### On the controllers
 You can install this package with pip (`pipx` is not available on controllers):
@@ -124,13 +125,30 @@ Install the needed `apt` packages, clone this repository, create a virtual envir
 
 ```shell
 sudo apt update
-sudo apt install git can-utils net-utils python3 python3-pip python3-venv 
+sudo apt install git can-utils net-utils python3 python3-pip python3-venv pipx
+```
 
+If you want to install the utility globally on your system, use:
+```
+pipx install "advsimulators@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/tutorials"
+pipx install "advmonitors@git+https://github.com/ADVANTICS/examples.git@dev#&subdirectory=charge-controllers/monitors"
+```
+
+If you would rather like to run from source:
+```
 git clone https://github.com/ADVANTICS/examples
 cd examples
 python3 -m venv venv
 source venv/bin/activate
+```
 
+```
+# Use the following if you want to install the package from source
+pip install -e charge-controllers/monitors/
+pip install -e charge-controllers/tutorials/
+```
+```
+# ... or use the following instead if you want to run from the scripts without installing the package
 pip install -r charge-controllers/monitors/requirements.txt
 pip install -r charge-controllers/tutorials/requirements.txt
 ```
@@ -245,6 +263,29 @@ Restart the controller software for the new config to take effect:
 
 Assuming the virtual environment of this project is active with all the steps are completed as described above, in four
 separate terminal sessions:
+
+### For a global installation (pipx)
+**EVSE simulator**
+```
+evse-simulator-v3
+```
+
+**PEV simulator**
+```
+pev-simulator-v2
+```
+
+**EVSE monitor**
+```
+evse-monitor
+```
+
+**PEV monitor**
+```
+pev-monitor
+```
+
+### When running from local scripts
 
 ```shell
 cd charge-controllers/tutorials
