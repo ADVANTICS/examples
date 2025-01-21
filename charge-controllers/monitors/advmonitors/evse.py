@@ -39,13 +39,13 @@ if TYPE_CHECKING:
 
 
 CAN_CONFIGS: dict[str, Path] = {
-    path.name: path for path in resources.files('advmonitors.conf').iterdir()
+    path.name: path for path in (resources.files('advmonitors') / 'conf').iterdir()
 }  # type: ignore
 DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
 DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
 
 CAN_DBS: dict[str, Path] = {
-    path.name: path for path in resources.files('advmonitors.dbs').iterdir()
+    path.name: path for path in (resources.files('advmonitors') / 'dbs').iterdir()
 }  # type: ignore
 
 
@@ -150,11 +150,13 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
 
         self._bus.set_filters(
             [
-                can.typechecking.CanFilterExtended(
-                    can_id=message.frame_id | ((self._index & 0x0F) << 24),
-                    can_mask=0x1FFFFFFF,
-                    extended=True,
-                )
+                # can.typechecking.CanFilterExtended(
+                {
+                    "can_id": message.frame_id | ((self._index & 0x0F) << 24),
+                    "can_mask": 0x1FFFFFFF,
+                    "extended": True,
+                }
+                # )
                 for message in self._db.messages
                 # if message.frame_id & (1 << 15)
             ],
