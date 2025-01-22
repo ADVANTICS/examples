@@ -289,29 +289,29 @@ pev-monitor
 
 ```shell
 cd charge-controllers/tutorials
-python3 simulate-generic-evse-v3.py
+python3 simulate_generic_evse_v3.py
 ```
 
 ```shell
 cd charge-controllers/monitors
-python3 evse-monitor.py
+python3 evse_monitor.py
 ```
 
 ```shell
 cd charge-controllers/tutorials/
-python3 simulate-generic-pev-v2.py
+python3 simulate_generic_pev_v2.py
 ```
 
 ```shell
 cd charge-controllers/monitors
-python3 pev-monitor.py
+python3 pev_monitor_v2.py
 ```
 
 Note that the default CAN config (`can.conf`) will run on channel `can0`. You can pass you custom can config using `--can-config` flag. If you want to use virtual CAN instead (e.g., for preliminary tests), there is a `vcan.conf` that you can use directly, e.g.:
 
 ```shell
 cd charge-controllers/tutorials/
-python3 simulate-generic-pev-v2.py --can-config vcan.conf
+python3 simulate_generic_pev_v2.py --can-config vcan.conf
 ```
 
 If you are unsure about how to set up a virtual CAN interface you can check the corresponding socketcan documentation [here](https://netmodule-linux.readthedocs.io/en/latest/howto/can.html).
