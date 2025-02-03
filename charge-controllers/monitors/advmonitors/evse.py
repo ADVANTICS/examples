@@ -38,17 +38,6 @@ if TYPE_CHECKING:
     from rich.console import ConsoleOptions, RenderResult
 
 
-CAN_CONFIGS: dict[str, Path] = {
-    path.name: path for path in (resources.files('advmonitors') / 'conf').iterdir()
-}  # type: ignore
-DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
-DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
-
-CAN_DBS: dict[str, Path] = {
-    path.name: path for path in (resources.files('advmonitors') / 'dbs').iterdir()
-}  # type: ignore
-
-
 @dataclass
 class ChargerControl:
     power_function: str
@@ -144,9 +133,8 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         self._app = app
         self._bus = app.bus
         self._index = pistol_index
-        self._db: cantools.database.Database = cantools.database.load_file(
-            CAN_DBS['Advantics_Generic_EVSE_protocol_v3.kcd']
-        )  # type: ignore[reportAttributeAccessIssue]
+        can_db_path = resources.files("advmonitors") / "dbs" / "Advantics_Generic_EVSE_protocol_v3.kcd"
+        self._db: cantools.database.Database = cantools.database.load_file(can_db_path)
 
         self._bus.set_filters(
             [
@@ -995,14 +983,15 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = DEFAULT_CAN_CONFIG,
+    can_config: str = "can.conf",
     pistol_index: int = 1,
     enable_can_logging: bool = False,
 ) -> None:
     global enable_can_log
     enable_can_log = enable_can_logging
+    can_config_path = resources.files("advmonitors") / "conf" / can_config
     try:
-        bus_config = can.util.load_config(path=can_config)
+        bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
@@ -1011,5 +1000,9 @@ def cli_main(
         app.display()
 
 
-if __name__ == '__main__':
+def main():
     typer.run(cli_main)
+
+
+if __name__ == '__main__':
+    main()

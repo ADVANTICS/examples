@@ -118,9 +118,8 @@ class AdvanticsPEVInterfaceV1(can.Listener):
     def __init__(self, app: Application) -> None:
         self._app = app
         self._bus = app.bus
-        self._db: cantools.database.Database = cantools.database.load_file(
-            CAN_DBS['Advantics_Generic_PEV_protocol_v1.kcd'],
-        )  # type: ignore[reportAttributeAccessIssue]
+        can_db_path = resources.files("advmonitors") / "dbs" / "Advantics_Generic_PEV_protocol_v1.kcd"
+        self._db: cantools.database.Database = cantools.database.load_file(can_db_path)
 
         self._bus.set_filters(
             [
@@ -466,13 +465,12 @@ class Application:
         return ios.replace('H', '[green]H[/]').replace('L', '[red]L[/]')
 
 
-def cli_main(
-    can_config: Path = DEFAULT_CAN_CONFIG, enable_can_logging: bool = False
-) -> None:
+def cli_main(can_config: str = "can.conf", enable_can_logging: bool = False) -> None:
     global enable_can_log
     enable_can_log = enable_can_logging
+    can_config_path = resources.files("advmonitors") / "conf" / can_config
     try:
-        bus_config = can.util.load_config(path=can_config)
+        bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
@@ -481,5 +479,9 @@ def cli_main(
         app.display()
 
 
-if __name__ == '__main__':
+def main():
     typer.run(cli_main)
+
+
+if __name__ == '__main__':
+    main()
