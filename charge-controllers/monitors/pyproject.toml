@@ -33,9 +33,9 @@ include = [
 ]
 
 [project.scripts]
-evse-monitor="advmonitors.evse:cli_main"
-pev-monitor="advmonitors.pev:cli_main"
-
+evse-monitor="advmonitors.evse:main"
+pev-monitor-v1="advmonitors.pev_v1:main"
+pev-monitor-v2="advmonitors.pev_v2:main"
 
 [tool.mypy]
 namespace_packages = true
