@@ -12,7 +12,6 @@ import enum
 import struct
 import time
 from importlib import resources
-from pathlib import Path
 from threading import Event, Thread
 from typing import TYPE_CHECKING
 
@@ -26,13 +25,6 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Any, Self
 
-
-CAN_CONFIGS: dict[str, Path] = {
-    path.name: path 
-    for path in resources.files("advsimulators.conf").iterdir()
-} # type: ignore
-DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
-DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
 
 class FrameID(enum.IntEnum):
     """Enumeration of all CAN messages of the interface and their base frame IDs"""
@@ -334,63 +326,60 @@ class Simulator(can.Listener):
     def update_state(self, new_state: ControllerState) -> None:
         """Uses [0x6B000] Advantics_Controller_Status.State to sequence non-powered things"""
 
-        match new_state:
-            case ControllerState.Not_Available:
-                # The controller starts by default in Not_Available.
-                # You need to send it once the Sequence_Control message with
-                # flag Start_Charge_Authorisation set to 1.
-                if self.sequence_flags & SequenceFlags.Start_Charge_Authorisation:
-                    self.send_sequence_control()
+        if new_state == ControllerState.Not_Available:
+            # The controller starts by default in Not_Available.
+            # You need to send it once the Sequence_Control message with
+            # flag Start_Charge_Authorisation set to 1.
+            if self.sequence_flags & SequenceFlags.Start_Charge_Authorisation:
+                self.send_sequence_control()
 
-            case ControllerState.Waiting_For_PEV:
-                # This indicates we terminated a charge session (or controller just started).
-                # Use it to reset our internal states.
-                self.reset()
-                print('--------------------------------------')
+        elif new_state == ControllerState.Waiting_For_PEV:
+            # This indicates we terminated a charge session (or controller just started).
+            # Use it to reset our internal states.
+            self.reset()
+            print('--------------------------------------')
 
-            case ControllerState.CCS_Authorisation_Process:
-                # In CCS_Authorisation_Process we want to update sequence flags
-                # with both CCS_Authorisation_Done, and CCS_Authorisation_Valid.
-                if not (self.sequence_flags & SequenceFlags.CCS_Authorisation_Done):
-                    print('Authorising user...')
-                    call_later(
-                        self.simulate_ccs_authorisation,
-                        self._ccs_authorisation_duration,
-                    )
-
-            case ControllerState.Connected_With_Full_Info:
-                # Here we have to update sequence flags with Charge_Parameters_Done
-                if not (self.sequence_flags & SequenceFlags.Charge_Parameters_Done):
-                    print('Determining charge parameters...')
-                    call_later(
-                        self.simulate_charge_parameters_done,
-                        self._charge_parameters_negotiation_duration,
-                    )
-
-            case ControllerState.Insulation_Test:
-                # Before we can receive setpoints for insulation test, we must signal
-                # System_Enable to be 1. You could have it always set to 1 if you want.
-                # But here we will use it for the intended feature of waiting
-                # power modules wake-up.
-                if not self.system_enable:
-                    print('Waking-up power modules...')
-                    call_later(
-                        self.simulate_power_modules_wake_up,
-                        self._power_modules_wake_up_duration,
-                    )
-
-            case ControllerState.Charging:
-                # Fall back to charging at max current in the beginning of charging every time.
-                # To be overridden by OCPP if wanted.
-                self._dynamic_target_current = self.current_range_max
-                print(
-                    f'Update dynamic target current as {self._dynamic_target_current}'
+        elif new_state == ControllerState.CCS_Authorisation_Process:
+            # In CCS_Authorisation_Process we want to update sequence flags
+            # with both CCS_Authorisation_Done, and CCS_Authorisation_Valid.
+            if not (self.sequence_flags & SequenceFlags.CCS_Authorisation_Done):
+                print('Authorising user...')
+                call_later(
+                    self.simulate_ccs_authorisation,
+                    self._ccs_authorisation_duration,
                 )
-                # To end the simulation after a set time
-                call_later(self.simulate_normal_charge_stop, self._charge_duration)
 
-            case _:
-                pass
+        elif new_state == ControllerState.Connected_With_Full_Info:
+            # Here we have to update sequence flags with Charge_Parameters_Done
+            if not (self.sequence_flags & SequenceFlags.Charge_Parameters_Done):
+                print('Determining charge parameters...')
+                call_later(
+                    self.simulate_charge_parameters_done,
+                    self._charge_parameters_negotiation_duration,
+                )
+
+        elif new_state == ControllerState.Insulation_Test:
+            # Before we can receive setpoints for insulation test, we must signal
+            # System_Enable to be 1. You could have it always set to 1 if you want.
+            # But here we will use it for the intended feature of waiting
+            # power modules wake-up.
+            if not self.system_enable:
+                print('Waking-up power modules...')
+                call_later(
+                    self.simulate_power_modules_wake_up,
+                    self._power_modules_wake_up_duration,
+                )
+
+        elif new_state == ControllerState.Charging:
+            # Fall back to charging at max current in the beginning of charging every time.
+            # To be overridden by OCPP if wanted.
+            self._dynamic_target_current = self.current_range_max
+            print(
+                f'Update dynamic target current as {self._dynamic_target_current}'
+            )
+            # To end the simulation after a set time
+            call_later(self.simulate_normal_charge_stop, self._charge_duration)
+
 
     def simulate_ccs_authorisation(self) -> None:
         """Delayed callback to proceed with user authorisation process"""
@@ -435,21 +424,20 @@ class Simulator(can.Listener):
         or range, the setpoints mode, and the output contactors and voltage lowering commands.
         """
 
-        match self.power_function:
-            case PowerFunction.Off:
-                self.handle_off()
+        if self.power_function == PowerFunction.Off:
+            self.handle_off()
 
-            case PowerFunction.Standby:
-                self.handle_standby()
+        elif self.power_function == PowerFunction.Standby:
+            self.handle_standby()
 
-            case PowerFunction.Insulation_Test:
-                self.handle_insulation_test()
+        elif self.power_function == PowerFunction.Insulation_Test:
+            self.handle_insulation_test()
 
-            case PowerFunction.Precharge:
-                self.handle_precharge()
+        elif self.power_function == PowerFunction.Precharge:
+            self.handle_precharge()
 
-            case PowerFunction.Power_Transfer:
-                self.handle_power_transfer()
+        elif self.power_function == PowerFunction.Power_Transfer:
+            self.handle_power_transfer()
 
         self._last_power_function = self.power_function
 
@@ -950,8 +938,7 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = DEFAULT_CAN_CONFIG,
-    *,
+    can_config: str = "can.conf",
     pistol_index: int = 1,
     ccs_authorisation_duration: float = 3,
     ccs_authorisation_success: bool = True,
@@ -968,8 +955,9 @@ def cli_main(
     maximum_discharge_current: float = 120,
 ) -> None:
     """Simulator of power modules compatible with Advantics EVSE Generic CAN interface v3"""
+    can_config_path = resources.files("advsimulators") / "conf" / can_config
     try:
-        bus_config = can.util.load_config(path=can_config)
+        bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
@@ -994,5 +982,9 @@ def cli_main(
         app.run()
 
 
-if __name__ == '__main__':
+def main():
     typer.run(cli_main)
+
+
+if __name__ == '__main__':
+    main()

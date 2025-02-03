@@ -8,11 +8,10 @@
 from __future__ import annotations
 
 # System imports
-from importlib import resources
 import struct
 import time
 from enum import IntEnum
-from pathlib import Path
+from importlib import resources
 from threading import Event, Thread
 from typing import TYPE_CHECKING
 
@@ -25,13 +24,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
     from typing import Any, Self
-
-
-CAN_CONFIGS: dict[str, Path] = {
-    path.name: path for path in resources.files('advsimulators.conf').iterdir()
-}  # type: ignore
-DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
-DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
 
 
 class FrameID(IntEnum):
@@ -304,29 +296,25 @@ class Simulator(can.Listener):
             self.decode_ev_extra_bpt_information(msg.data)
 
     def update_state(self) -> None:
-        match self.session_stage:
-            case CommunicationStage.Waiting_For_EVSE:
-                # This indicate we terminated a charge session (or controller just started).
-                # Use it to reset our internal states.
-                self.reset()
+        if self.session_stage == CommunicationStage.Waiting_For_EVSE:
+            # This indicates we terminated a charge session (or controller just started).
+            # Use it to reset our internal states.
+            self.reset()
 
-            case CommunicationStage.Precharge:
-                print(
-                    f'Inlet voltage ramping up to {self.ev_dc_battery_voltage:.1f} V...'
-                )
-                self._slope_start_voltage = self.ev_dc_inlet_voltage
-                total_time = self._charger_dead_time + (
-                    (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
-                    / self._charger_voltage_ramp_up_slope
-                )
-                subdivide_dt(self.simulate_precharge, total_time, 0.1)
+        elif self.session_stage == CommunicationStage.Precharge:
+            print(
+                f'Inlet voltage ramping up to {self.ev_dc_battery_voltage:.1f} V...'
+            )
+            self._slope_start_voltage = self.ev_dc_inlet_voltage
+            total_time = self._charger_dead_time + (
+                (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
+                / self._charger_voltage_ramp_up_slope
+            )
+            subdivide_dt(self.simulate_precharge, total_time, 0.1)
 
-            case CommunicationStage.Welding_Detection:
-                print('Setting present_current to 0 A')
-                self.ev_dc_present_current = 0
-
-            case _:
-                pass
+        elif self.session_stage == CommunicationStage.Welding_Detection:
+            print('Setting present_current to 0 A')
+            self.ev_dc_present_current = 0
 
     def simulate_precharge(self, elapsed: float, done: bool) -> None:  # noqa: FBT001
         if elapsed <= self._charger_dead_time:
@@ -679,7 +667,7 @@ class Application:
 
 
 def cli_main(
-    can_config: Path = DEFAULT_CAN_CONFIG,
+    can_config: str = "can.conf",
     charger_dead_time: float = 1,
     charger_voltage_ramp_up_slope: float = 200,
     contactors_delay: float = 0.6,
@@ -691,8 +679,9 @@ def cli_main(
     departure_time: int = 86400,  # 24h in s
 ) -> None:
     """Simulator of BMS/vehicle side compatible with Advantics PEV Generic CAN interface v2"""
+    can_config_path = resources.files("advsimulators") / "conf" / can_config
     try:
-        bus_config = can.util.load_config(path=can_config)
+        bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
@@ -712,5 +701,9 @@ def cli_main(
         app.run()
 
 
-if __name__ == '__main__':
+def main():
     typer.run(cli_main)
+
+
+if __name__ == '__main__':
+    main()
