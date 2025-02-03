@@ -30,8 +30,9 @@ include = [
 ]
 
 [project.scripts]
-evse-simulator-v3="advsimulators.evse.generic_v3:cli_main"
-pev-simulator-v2="advsimulators.pev.generic_v2:cli_main"
+evse-simulator-v3="advsimulators.evse.generic_v3:main"
+pev-simulator-v1="advsimulators.pev.generic_v1:main"
+pev-simulator-v2="advsimulators.pev.generic_v2:main"
 
 
 [tool.mypy]
