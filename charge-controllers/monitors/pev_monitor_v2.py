@@ -1,4 +1,3 @@
-import typer
-from advmonitors.pev_v2 import cli_main
+from advmonitors.pev_v2 import main
 
-typer.run(cli_main)
+main()
