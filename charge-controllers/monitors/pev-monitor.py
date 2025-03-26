@@ -83,17 +83,19 @@ class VehicleStatus:
     soc: int
     energy_capacity: float
     ac_vehicle_ready: str
-    dc_current_request: float
+    dc_max_charge_current: float
+    dc_max_discharge_current: float
     dc_present_current: float
     dc_contactors_closed: str
     dc_normal_end_of_charge: str
+    dc_emergency_stop: str
     dc_battery_voltage: float
     dc_inlet_voltage: float
 
 
 enable_can_log = False
 logged_messages = {}
-log_filename = f"./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"
+log_filename = f'./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
 
 
 def log_can_msg(msg_name, signals, senders=None):
@@ -106,7 +108,9 @@ def log_can_msg(msg_name, signals, senders=None):
             return
 
     with open(log_filename, 'a') as file:
-        file.write(f"{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n")
+        file.write(
+            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n'
+        )
     logged_messages[msg_name] = signals
 
 
@@ -177,10 +181,12 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             soc=0,
             energy_capacity=0,
             ac_vehicle_ready='----',
-            dc_current_request=0,
+            dc_max_charge_current=0,
+            dc_max_discharge_current=0,
             dc_present_current=0,
             dc_contactors_closed='----',
             dc_normal_end_of_charge='----',
+            dc_emergency_stop='----',
             dc_battery_voltage=0,
             dc_inlet_voltage=0,
         )
@@ -230,8 +236,8 @@ class AdvanticsPEVInterfaceV2(can.Listener):
                 signals['DC_Contactor_Negative_Feedback']
             )
             self.vehicle_control.digital_inputs = (
-                f'1:{"H" if signals['Digital_Input1'] else "L"} '
-                f'2:{"H" if signals['Digital_Input2'] else "L"}'
+                f'1:{"H" if signals["Digital_Input1"] else "L"} '
+                f'2:{"H" if signals["Digital_Input2"] else "L"}'
             )
             self.vehicle_control.stop_charge = str(signals['Stop_Charge'])
             self.vehicle_control.ptc0 = int(signals['PTC0'])
@@ -254,13 +260,15 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'DC_Status1':
-            self.vehicle_status.dc_current_request = float(signals['Current_Request'])
+            self.vehicle_status.dc_max_charge_current = float(signals['Max_Charge_Current'])
+            self.vehicle_status.dc_max_discharge_current = float(signals['Max_Discharge_Current'])
             self.vehicle_status.dc_present_current = float(signals['Present_Current'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'DC_Status2':
             self.vehicle_status.dc_contactors_closed = str(signals['Contactors_Closed'])
             self.vehicle_status.dc_normal_end_of_charge = str(signals['Normal_End_of_Charge'])
+            self.vehicle_status.dc_emergency_stop = str(signals['Emergency_Stop'])
             self.vehicle_status.dc_battery_voltage = float(signals['Battery_Voltage'])
             self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
@@ -295,7 +303,7 @@ class RenderableConsole(Console):
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         texts = self.export_text(clear=False).split('\n')
-        yield from texts[-options.height:]
+        yield from texts[-options.height :]
 
 
 class Application:
@@ -370,10 +378,10 @@ class Application:
         return self
 
     def __exit__(
-            self,
-            exctype: type[BaseException] | None,
-            excinst: BaseException | None,
-            exctb: TracebackType | None,
+        self,
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
     ) -> bool:
         self.shutdown()
         return False
@@ -459,12 +467,17 @@ class Application:
         table.add_section()
         table.add_row('[b]DC inlet voltage:[/]', f'{data.dc_inlet_voltage:0.2f} V')
         table.add_row('[b]DC battery voltage:[/]', f'{data.dc_battery_voltage:0.2f} V')
-        table.add_row('[b]DC current request:[/]', f'{data.dc_current_request:0.2f} A')
+        table.add_row('[b]DC max charge current:[/]', f'{data.dc_max_charge_current:0.2f} A')
+        table.add_row('[b]DC max discharge current:[/]', f'{data.dc_max_discharge_current:0.2f} A')
         table.add_row('[b]DC present current:[/]', f'{data.dc_present_current:0.2f} A')
         table.add_row('[b]DC contactors closed:[/]', data.dc_contactors_closed)
         table.add_row(
             '[b]DC normal end of charge:[/]',
             self._color_flag(data.dc_normal_end_of_charge, not_prefix='No_', invert=True),
+        )
+        table.add_row(
+            '[b]DC emergency stop:[/]',
+            self._color_flag(data.dc_emergency_stop, not_prefix='No_', invert=True),
         )
         table.add_section()
         table.add_row('[b]AC vehicle ready:[/]', self._color_flag(data.ac_vehicle_ready))
@@ -482,10 +495,7 @@ class Application:
         return ios.replace('H', '[green]H[/]').replace('L', '[red]L[/]')
 
 
-def cli_main(
-        can_config: Path = Path('can.conf'),
-        enable_can_logging: bool = False
-) -> None:
+def cli_main(can_config: Path = Path('can.conf'), enable_can_logging: bool = False) -> None:
     global enable_can_log
     enable_can_log = enable_can_logging
     try:

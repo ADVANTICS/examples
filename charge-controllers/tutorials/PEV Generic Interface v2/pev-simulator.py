@@ -90,6 +90,7 @@ class InletPins(IntEnum):
     CCS_AC_Three_Phase_Core = 3
     CCS_DC_Core = 4
     CCS_DC_Extended = 5
+    MCS = 6
 
 
 class Simulator(can.Listener):
@@ -109,7 +110,7 @@ class Simulator(can.Listener):
     ev_ac_ready: bool
     ev_dc_battery_voltage: float
     ev_dc_inlet_voltage: float
-    ev_dc_current_request: float
+    ev_dc_max_charge_current: float
     ev_dc_present_current: float
     ev_dc_contactors_closed: bool
     ev_dc_request_normal_stop: bool
@@ -117,17 +118,21 @@ class Simulator(can.Listener):
     command_close_contactors: bool
 
     def __init__(
-            self,
-            app: Application,
-            charger_dead_time: float = 1,
-            charger_voltage_ramp_up_slope: float = 200,
-            contactors_delay: float = 0.6,
-            maximum_energy_request: float = 75.530,  # 100%
-            target_energy_request: float = 60.424,  # 80%
-            minimum_energy_request: float = 22.659,  # 30%
-            maximum_v2x_energy_request: float = 60.424,  # 80%
-            minimum_v2x_energy_request: float = 22.659,  # 30%
-            departure_time: int = 86400 # 24h in s
+        self,
+        app: Application,
+        charger_dead_time: float = 1,
+        charger_voltage_ramp_up_slope: float = 200,
+        contactors_delay: float = 0.6,
+        battery_voltage: float = 330,
+        max_charge_current: float = 200,
+        max_discharge_current: float = 0,
+        maximum_energy_request: float = 75.530,  # 100%
+        target_energy_request: float = 60.424,  # 80%
+        minimum_energy_request: float = 22.659,  # 30%
+        maximum_v2x_energy_request: float = 60.424,  # 80%
+        minimum_v2x_energy_request: float = 22.659,  # 30%
+        departure_time: int = 86400,  # 24h in s
+        can_currents_slope: float = 0.1,
     ) -> None:
         self._app = app
         self._bus = app.bus
@@ -136,12 +141,16 @@ class Simulator(can.Listener):
         self._charger_dead_time = charger_dead_time
         self._charger_voltage_ramp_up_slope = charger_voltage_ramp_up_slope
         self._contactors_delay = contactors_delay
+        self._battery_voltage = battery_voltage
+        self._max_charge_current = max_charge_current
+        self._max_discharge_current = max_discharge_current
         self._maximum_energy_request: float = maximum_energy_request
         self._target_energy_request: float = target_energy_request
         self._minimum_energy_request: float = minimum_energy_request
         self._maximum_v2x_energy_request: float = maximum_v2x_energy_request
         self._minimum_v2x_energy_request: float = minimum_v2x_energy_request
         self._departure_time: int = departure_time
+        self._can_currents_slope = can_currents_slope
 
         # Initialise internal states
         self._slope_start_voltage = 0
@@ -233,12 +242,14 @@ class Simulator(can.Listener):
         self.ev_soc = 30
         self.ev_energy_capacity = 75.530
         self.ev_ac_ready = False
-        self.ev_dc_battery_voltage = 330
+        self.ev_dc_battery_voltage = self._battery_voltage
         self.ev_dc_inlet_voltage = 0
-        self.ev_dc_current_request = 200
+        self.ev_dc_max_charge_current = self._max_charge_current
+        self.ev_dc_max_discharge_current = self._max_discharge_current
         self.ev_dc_present_current = 0
         self.ev_dc_contactors_closed = False
         self.ev_dc_request_normal_stop = False
+        self.ev_dc_request_emergency_stop = False
 
     # Messages reading and state processing
 
@@ -306,8 +317,8 @@ class Simulator(can.Listener):
                 print(f'Inlet voltage ramping up to {self.ev_dc_battery_voltage:.1f} V...')
                 self._slope_start_voltage = self.ev_dc_inlet_voltage
                 total_time = self._charger_dead_time + (
-                        (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
-                        / self._charger_voltage_ramp_up_slope
+                    (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
+                    / self._charger_voltage_ramp_up_slope
                 )
                 subdivide_dt(self.simulate_precharge, total_time, 0.1)
 
@@ -423,17 +434,30 @@ class Simulator(can.Listener):
     def encode_dc_status1(self) -> bytes:
         return struct.pack(
             '<hhhh',
-            self._cap(round(self.ev_dc_current_request * 10), -32768, 32767),
-            self._cap(round(self.ev_dc_present_current * 10), -32768, 32767),
-            0,
+            self._cap(
+                round(self.ev_dc_max_charge_current / self._can_currents_slope),
+                -32768,
+                32767,
+            ),
+            self._cap(
+                round(self.ev_dc_present_current / self._can_currents_slope),
+                -32768,
+                32767,
+            ),
+            self._cap(
+                round(self.ev_dc_max_discharge_current / self._can_currents_slope),
+                -32768,
+                32767,
+            ),
             0,
         )
 
     def decode_dc_status1(self, data: bytes | bytearray) -> None:
-        current_request, present_current, _, _ = struct.unpack('<hhhh', data)
+        max_charge_current, present_current, max_discharge_current, _ = struct.unpack('<hhhh', data)
 
-        self.ev_dc_current_request = current_request / 10
-        self.ev_dc_present_current = present_current / 10
+        self.ev_dc_max_charge_current = max_charge_current * self._can_currents_slope
+        self.ev_dc_present_current = present_current * self._can_currents_slope
+        self.ev_dc_max_discharge_current = max_discharge_current * self._can_currents_slope
 
     def _send_callback_dc_status1(self, msg: can.Message) -> None:
         """Callback provided to self._bus.send_periodic() for automatic update
@@ -446,6 +470,7 @@ class Simulator(can.Listener):
         flags = 0
         flags |= self.ev_dc_contactors_closed << 0
         flags |= self.ev_dc_request_normal_stop << 1
+        flags |= self.ev_dc_request_emergency_stop << 2
         return struct.pack(
             '<BHH',
             flags,
@@ -458,6 +483,7 @@ class Simulator(can.Listener):
 
         self.ev_dc_contactors_closed = bool(flags & 0x01)
         self.ev_dc_request_normal_stop = bool(flags & 0x02)
+        self.ev_dc_request_emergency_stop = bool(flags & 0x04)
         self.ev_dc_battery_voltage = battery_voltage / 10
         self.ev_dc_inlet_voltage = inlet_voltage / 10
 
@@ -477,7 +503,9 @@ class Simulator(can.Listener):
         )
 
     def decode_ev_energy_request(self, data: bytes | bytearray) -> None:
-        target_energy_request, minimum_energy_request, maximum_energy_request = struct.unpack('<HHH', data)
+        target_energy_request, minimum_energy_request, maximum_energy_request = struct.unpack(
+            '<HHH', data
+        )
         self._target_energy_request = target_energy_request / 100
         self._minimum_energy_request = minimum_energy_request / 100
         self._maximum_energy_request = maximum_energy_request / 100
@@ -635,10 +663,10 @@ class Application:
     ###
 
     def __exit__(
-            self,
-            exctype: type[BaseException] | None,
-            excinst: BaseException | None,
-            exctb: TracebackType | None,
+        self,
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
     ) -> bool:
         """Exits a with-statement by shutting down the application (incl. closing the bus).
         Does not handle any exception."""
@@ -660,16 +688,20 @@ class Application:
 
 
 def cli_main(
-        can_config: Path = Path('can.conf'),
-        charger_dead_time: float = 1,
-        charger_voltage_ramp_up_slope: float = 200,
-        contactors_delay: float = 0.6,
-        maximum_energy_request: float = 75.530,  # 100%
-        target_energy_request: float = 60.424,  # 80%
-        minimum_energy_request: float = 22.659,  # 30%
-        maximum_v2x_energy_request: float = 60.424,  # 80%
-        minimum_v2x_energy_request: float = 22.659,  # 30%
-        departure_time: int = 86400,  # 24h in s
+    can_config: Path = Path('can.conf'),
+    charger_dead_time: float = 1,
+    charger_voltage_ramp_up_slope: float = 200,
+    contactors_delay: float = 0.6,
+    battery_voltage: float = 330,
+    maximum_charge_current: float = 200,
+    maximum_discharge_current: float = 0,
+    maximum_energy_request: float = 75.530,  # 100%
+    target_energy_request: float = 60.424,  # 80%
+    minimum_energy_request: float = 22.659,  # 30%
+    maximum_v2x_energy_request: float = 60.424,  # 80%
+    minimum_v2x_energy_request: float = 22.659,  # 30%
+    departure_time: int = 86400,  # 24h in s
+    can_currents_slope: float = 0.1,
 ) -> None:
     """Simulator of BMS/vehicle side compatible with Advantics PEV Generic CAN interface v2"""
     try:
@@ -679,16 +711,20 @@ def cli_main(
         raise typer.Abort from ex
 
     with Application(
-            bus_config,
-            charger_dead_time=charger_dead_time,
-            charger_voltage_ramp_up_slope=charger_voltage_ramp_up_slope,
-            contactors_delay=contactors_delay,
-            maximum_energy_request = maximum_energy_request,
-            target_energy_request = target_energy_request,
-            minimum_energy_request = minimum_energy_request,
-            maximum_v2x_energy_request = maximum_v2x_energy_request,
-            minimum_v2x_energy_request = minimum_v2x_energy_request,
-            departure_time = departure_time,
+        bus_config,
+        charger_dead_time=charger_dead_time,
+        charger_voltage_ramp_up_slope=charger_voltage_ramp_up_slope,
+        contactors_delay=contactors_delay,
+        battery_voltage=battery_voltage,
+        max_charge_current=maximum_charge_current,
+        max_discharge_current=maximum_discharge_current,
+        maximum_energy_request=maximum_energy_request,
+        target_energy_request=target_energy_request,
+        minimum_energy_request=minimum_energy_request,
+        maximum_v2x_energy_request=maximum_v2x_energy_request,
+        minimum_v2x_energy_request=minimum_v2x_energy_request,
+        departure_time=departure_time,
+        can_currents_slope=can_currents_slope,
     ) as app:
         app.run()
 
