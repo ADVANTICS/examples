@@ -82,10 +82,12 @@ class VehicleStatus:
     soc: int
     energy_capacity: float
     ac_vehicle_ready: str
-    dc_current_request: float
+    max_charge_current: float
     dc_present_current: float
+    max_discharge_current: float
     dc_contactors_closed: str
     dc_normal_end_of_charge: str
+    dc_emergency_stop: str
     dc_battery_voltage: float
     dc_inlet_voltage: float
 
@@ -177,10 +179,12 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             soc=0,
             energy_capacity=0,
             ac_vehicle_ready='----',
-            dc_current_request=0,
+            max_discharge_current=0,
             dc_present_current=0,
+            max_charge_current=0,
             dc_contactors_closed='----',
             dc_normal_end_of_charge='----',
+            dc_emergency_stop='----',
             dc_battery_voltage=0,
             dc_inlet_voltage=0,
         )
@@ -260,8 +264,9 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'DC_Status1':
-            self.vehicle_status.dc_current_request = float(signals['Current_Request'])
+            self.vehicle_status.max_discharge_current = float(signals['Max_Discharge_Current'])
             self.vehicle_status.dc_present_current = float(signals['Present_Current'])
+            self.vehicle_status.max_charge_current = float(signals['Max_Charge_Current'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'DC_Status2':
@@ -269,7 +274,9 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             self.vehicle_status.dc_normal_end_of_charge = str(
                 signals['Normal_End_of_Charge']
             )
+            self.vehicle_status.dc_emergency_stop = str(signals['Emergency_Stop'])
             self.vehicle_status.dc_battery_voltage = float(signals['Battery_Voltage'])
+            self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
 
@@ -499,8 +506,9 @@ class Application:
         table.add_section()
         table.add_row('[b]DC inlet voltage:[/]', f'{data.dc_inlet_voltage:0.2f} V')
         table.add_row('[b]DC battery voltage:[/]', f'{data.dc_battery_voltage:0.2f} V')
-        table.add_row('[b]DC current request:[/]', f'{data.dc_current_request:0.2f} A')
+        table.add_row('[b]DC max charge current:[/]', f'{data.max_charge_current:0.2f} A')
         table.add_row('[b]DC present current:[/]', f'{data.dc_present_current:0.2f} A')
+        table.add_row('[b]DC max discharge current:[/]', f'{data.max_discharge_current:0.2f} A')
         table.add_row('[b]DC contactors closed:[/]', data.dc_contactors_closed)
         table.add_row(
             '[b]DC normal end of charge:[/]',
@@ -508,6 +516,7 @@ class Application:
                 data.dc_normal_end_of_charge, not_prefix='No_', invert=True
             ),
         )
+        table.add_row('[b]DC emergency stop:[/]', data.dc_emergency_stop)
         table.add_section()
         table.add_row(
             '[b]AC vehicle ready:[/]', self._color_flag(data.ac_vehicle_ready)
