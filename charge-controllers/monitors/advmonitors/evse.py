@@ -12,7 +12,6 @@ from importlib import resources
 import os
 from collections import deque
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 from datetime import datetime
 
@@ -95,8 +94,12 @@ class VehicleStatus:
     ready: str
     battery_capacity: int
     soc: int
+    min_soc: int
+    target_soc: int
+    max_soc: int
     min_voltage: float
     max_voltage: float
+    present_voltage: float
     min_charge_current: float
     max_charge_current: float
     min_charge_power: int
@@ -105,6 +108,9 @@ class VehicleStatus:
     max_discharge_current: float
     min_discharge_power: int
     max_discharge_power: int
+    min_energy_request: float
+    max_energy_request: float
+    target_energy_request: float
 
 
 enable_can_log = False
@@ -204,8 +210,12 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
             ready='----',
             battery_capacity=0,
             soc=0,
+            min_soc=0,
+            target_soc=0,
+            max_soc=0,
             min_voltage=0,
             max_voltage=0,
+            present_voltage=0,
             min_charge_current=0,
             max_charge_current=0,
             min_charge_power=0,
@@ -214,6 +224,9 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
             max_discharge_current=0,
             min_discharge_power=0,
             max_discharge_power=0,
+            min_energy_request=0,
+            max_energy_request=0,
+            target_energy_request=0,
         )
         self._app.update_vehicle_status(self.vehicle_status)
 
@@ -264,11 +277,15 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         elif message.name == 'EV_Information_Battery':
             self.vehicle_status.battery_capacity = int(signals['Battery_Capacity'])
             self.vehicle_status.soc = int(signals['Present_State_of_Charge'])
+            self.vehicle_status.min_soc = int(signals['Minimum_State_of_Charge'])
+            self.vehicle_status.target_soc = int(signals['Target_State_of_Charge'])
+            self.vehicle_status.max_soc = int(signals['Maximum_State_of_Charge'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'EV_Information_Voltages':
             self.vehicle_status.min_voltage = float(signals['EV_Minimum_Voltage'])
             self.vehicle_status.max_voltage = float(signals['EV_Maximum_Voltage'])
+            self.vehicle_status.present_voltage = float(signals['EV_Present_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'EV_Information_Charge_Limits':
@@ -298,6 +315,18 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
             )
             self.vehicle_status.max_discharge_power = int(
                 signals['EV_Maximum_Discharge_Power']
+            )
+            self._app.update_vehicle_status(self.vehicle_status)
+
+        elif message.name == 'EV_Information_Energy':
+            self.vehicle_status.min_energy_request = float(
+                signals['EV_Minimum_Energy_Request']
+            )
+            self.vehicle_status.target_energy_request = float(
+                signals['EV_Target_Energy_Request']
+            )
+            self.vehicle_status.max_energy_request = float(
+                signals['EV_Maximum_Energy_Request']
             )
             self._app.update_vehicle_status(self.vehicle_status)
 
@@ -709,9 +738,13 @@ class Application:
         table.add_section()
         table.add_row('[b]Battery capacity:[/]', f'{data.battery_capacity} kWh')
         table.add_row('[b]State of charge:[/]', f'{data.soc} %')
+        table.add_row('[b]Min State of charge:[/]', f'{data.min_soc} %')
+        table.add_row('[b]Target State of charge:[/]', f'{data.target_soc} %')
+        table.add_row('[b]Max State of charge:[/]', f'{data.max_soc} %')
         table.add_section()
         table.add_row('[b]Min voltage:[/]', f'{data.min_voltage:0.2f} V')
         table.add_row('[b]Max voltage:[/]', f'{data.max_voltage:0.2f} V')
+        table.add_row('[b]Present voltage:[/]', f'{data.present_voltage:0.2f} V')
         table.add_section()
         table.add_row('[b]Min charge current:[/]', f'{data.min_charge_current:0.2f} A')
         table.add_row('[b]Max charge current:[/]', f'{data.max_charge_current:0.2f} A')
@@ -726,6 +759,10 @@ class Application:
         )
         table.add_row('[b]Min discharge power:[/]', f'{data.min_discharge_power} kW')
         table.add_row('[b]Max discharge power:[/]', f'{data.max_discharge_power} kW')
+        table.add_section()
+        table.add_row('[b]Min energy request:[/]', f'{data.min_energy_request:0.2f} kWh')
+        table.add_row('[b]Target energy request:[/]', f'{data.target_energy_request:0.2f} kWh')
+        table.add_row('[b]Max energy request:[/]', f'{data.max_energy_request:0.2f} kWh')
         self.layout['First']['vehicle-status'].update(
             Panel(table, title='Vehicle Status')
         )
