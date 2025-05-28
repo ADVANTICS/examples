@@ -19,6 +19,7 @@ from datetime import datetime
 import asciichartpy
 import can
 import cantools.database
+from cantools.database.errors import DecodeError
 import typer
 from rich import box, print
 from rich.console import Console
@@ -233,9 +234,9 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
     def on_message_received(self, msg: can.Message) -> None:  # noqa: C901, PLR0912, PLR0915
         try:
             message = self._db.get_message_by_frame_id(msg.arbitration_id & 0xFFFFFF)
-        except KeyError:
+            signals = message.decode(msg.data)
+        except (KeyError, DecodeError):
             return
-        signals = message.decode(msg.data)
 
         log_can_msg(message.name, signals, message.senders)
 
