@@ -90,6 +90,7 @@ class InletPins(IntEnum):
     CCS_AC_Three_Phase_Core = 3
     CCS_DC_Core = 4
     CCS_DC_Extended = 5
+    MCS = 6
 
 
 class Simulator(can.Listener):
