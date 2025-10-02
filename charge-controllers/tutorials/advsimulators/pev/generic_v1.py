@@ -7,11 +7,12 @@
 # spell-checker:ignore EVSE EVCC exctype excinst exctb incl
 from __future__ import annotations
 
-# System imports
-from importlib import resources
 import struct
 import time
 from enum import IntEnum
+
+# System imports
+from importlib import resources
 from threading import Event, Thread
 from typing import TYPE_CHECKING
 
@@ -249,7 +250,6 @@ class Simulator(can.Listener):
         elif msg.arbitration_id == FrameID.DC_Status2:
             self.decode_dc_status2(msg.data)
 
-
     def update_state(self) -> None:
         if self.session_stage == CommunicationStage.Waiting_For_EVSE:
             # This indicates we terminated a charge session (or controller just started).
@@ -257,9 +257,7 @@ class Simulator(can.Listener):
             self.reset()
 
         elif self.session_stage == CommunicationStage.Precharge:
-            print(
-                f'Inlet voltage ramping up to {self.ev_dc_battery_voltage:.1f} V...'
-            )
+            print(f'Inlet voltage ramping up to {self.ev_dc_battery_voltage:.1f} V...')
             self._slope_start_voltage = self.ev_dc_inlet_voltage
             total_time = self._charger_dead_time + (
                 (self.ev_dc_battery_voltage - self.ev_dc_inlet_voltage)
@@ -271,7 +269,6 @@ class Simulator(can.Listener):
             print('Setting present_current to 0 A')
             self.ev_dc_present_current = 0
 
-
     def simulate_precharge(self, elapsed: float, done: bool) -> None:  # noqa: FBT001
         if elapsed <= self._charger_dead_time:
             return
@@ -279,8 +276,7 @@ class Simulator(can.Listener):
         if not done:
             elapsed -= self._charger_dead_time
             self.ev_dc_inlet_voltage = min(
-                self._slope_start_voltage
-                + (self._charger_voltage_ramp_up_slope * elapsed),
+                self._slope_start_voltage + (self._charger_voltage_ramp_up_slope * elapsed),
                 self.ev_dc_battery_voltage,
             )
         else:
@@ -419,6 +415,7 @@ class Simulator(can.Listener):
         of message content"""
         msg.data = self.encode_dc_status2()
 
+
 # Wrappers around threads to implement simulated behaviours
 
 
@@ -438,9 +435,7 @@ def call_later(callback: Callable[[], None], dt: float) -> Thread:
     return thread
 
 
-def subdivide_dt(
-    callback: Callable[[float, bool], None], dt: float, sub_dt: float
-) -> Thread:
+def subdivide_dt(callback: Callable[[float, bool], None], dt: float, sub_dt: float) -> Thread:
     """Calls a callback repeatedly, separated by time sub_dt, for a maximum total time of dt.
     The callback has to take two arguments:
     - A float (elapsed): This will be the time elapsed since the beginning.
@@ -473,9 +468,7 @@ def subdivide_dt(
 class Application:
     """Main application class. Handles creation of various objects, and life cycle of it."""
 
-    def __init__(
-        self, bus_config: can.typechecking.BusConfig, **interface_config: Any
-    ) -> None:
+    def __init__(self, bus_config: can.typechecking.BusConfig, **interface_config: Any) -> None:
         self._bus_config = bus_config
         self._interface_config = interface_config
 
@@ -561,7 +554,7 @@ class Application:
 
 
 def cli_main(
-    can_config: str = "can.conf",
+    can_config: str = 'can.conf',
     charger_dead_time: float = 1,
     charger_voltage_ramp_up_slope: float = 200,
     contactors_delay: float = 0.6,
@@ -573,7 +566,7 @@ def cli_main(
     departure_time: int = 86400,  # 24h in s
 ) -> None:
     """Simulator of BMS/vehicle side compatible with Advantics PEV Generic CAN interface v2"""
-    can_config_path = resources.files("advsimulators") / "conf" / can_config
+    can_config_path = resources.files('advsimulators') / 'conf' / can_config
     try:
         bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
@@ -595,7 +588,7 @@ def cli_main(
         app.run()
 
 
-def main():
+def main() -> None:
     typer.run(cli_main)
 
 
