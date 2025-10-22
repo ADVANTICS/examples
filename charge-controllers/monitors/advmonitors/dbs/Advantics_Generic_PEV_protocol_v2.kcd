@@ -120,7 +120,7 @@
                 The energy capacity of the EV battery.
                 In case this value is 0 we default to the config file entry `energy_capacity`.
                 </Notes>
-                <Value type="unsigned" slope="0.01" unit="kWh" min="0" max="655"/>
+                <Value type="unsigned" slope="0.1" unit="kWh" min="0" max="6553"/>
             </Signal>
 
         </Message>
@@ -280,6 +280,21 @@
                 ]]></Notes>
                 <Value type="unsigned" slope="1" unit="Amps" min="0" max="65535"/>
             </Signal>
+
+            <Signal name="Target_Voltage" offset="48" length="16" endianess="little">
+                <Notes><![CDATA[
+                    Allows dynamic target voltage updates.
+                    Will be capped by maximum voltage from config file and from EVSE data.
+                    Only taken into account when the config entry dynamic_target_voltage is set to true.
+                    Declare it as such in `/srv/config.cfg`:
+
+                        [vehicle]
+                        dynamic_target_voltage = True
+
+                    Note: This signal will be ignored if the config entry dynamic_target_voltage is set to false.
+                ]]></Notes>
+                <Value type="unsigned" slope="1" unit="Volts" min="0" max="65535"/>
+            </Signal>
         </Message>
 
         <Message id="0x613" length="5" name="DC_Status2" interval="100">
@@ -369,6 +384,42 @@
             </Signal>
         </Message>
 
+        <Message id="0x618" length="8" name="EV_Status" interval="100">
+            <Notes>Used to report the status of the EV (from BMS to charge controller)</Notes>
+
+            <Producer>
+                <NodeRef id="1"/>
+            </Producer>
+
+            <Signal name="HV_Preparing_Hold_Off" offset="0" length="1">
+                <Notes>
+                Allows the vehicle to delay the transition to powered states (starting from the insulation test) until the HV system is ready.
+
+                Use cases:
+                - Make sure the vehicle IMD is disabled before sending cablecheck request.
+                - Wait while preparing the HV system for power.
+
+                This signal should be set to 0 if the vehicle is ready for power.
+                When the charger is plugged-in and this signal is set to 1, the session will block at Communication_Stage.Connected_With_Full_Info state until this signal is set to 0 (and the inlet is locked).
+
+                0=False (Hold off Not Requested), 1=True (Hold off)
+
+                Note: limited by wait_hv_ready_timeout_ms config entry. Default is 40 seconds (defined by the standards):
+                    [ccs]
+                    wait_hv_ready_timeout_ms = 40000
+
+                </Notes>
+                <LabelSet>
+                    <Label name="Hold_Off_Not_Requested" value="0" />
+                    <Label name="Hold_Off" value="1" />
+                </LabelSet>
+            </Signal>
+
+            <Signal name="Reserved_Flags" offset="1" length="63">
+                <Notes>Reserved bits for future uses.</Notes>
+            </Signal>
+        </Message>
+
         <Message id="0x614" length="6" name="EV_Energy_Request" interval="100">
             <Notes>
             ISO 15118-20 specific message.
@@ -387,7 +438,7 @@
                 <Notes>
                 The energy of the EV corresponding to the target SOC.
                 </Notes>
-                <Value type="unsigned" slope="0.01" unit="kWh" min="0" max="655"/>
+                <Value type="unsigned" slope="0.1" unit="kWh" min="0" max="6553"/>
             </Signal>
 
             <Signal name="Maximum_Energy_Request" offset="16" length="16">
@@ -398,7 +449,7 @@
 
                 Will be capped by Energy_Capacity.
                 </Notes>
-                <Value type="unsigned" slope="0.01" unit="kWh" min="0" max="655"/>
+                <Value type="unsigned" slope="0.1" unit="kWh" min="0" max="6553"/>
             </Signal>
 
             <Signal name="Minimum_Energy_Request" offset="32" length="16">
@@ -406,7 +457,7 @@
                 The energy of the EV corresponding to the minimum SOC.
                 In case this message is not sent we default to the config file entry `min_energy_request`.
                 </Notes>
-                <Value type="unsigned" slope="0.01" unit="kWh" min="0" max="655"/>
+                <Value type="unsigned" slope="0.1" unit="kWh" min="0" max="6553"/>
             </Signal>
         </Message>
 
@@ -425,12 +476,12 @@
 
             <Signal name="Minimum_V2X_Energy_Request" offset="0" length="16">
                 <Notes>The minimum energy level for the bidirectional cycling activity range.</Notes>
-                <Value type="unsigned" slope="0.01" unit="kWh" min="0" max="655"/>
+                <Value type="unsigned" slope="0.1" unit="kWh" min="0" max="6553"/>
             </Signal>
 
             <Signal name="Maximum_V2X_Energy_Request" offset="16" length="16">
                 <Notes>The maximum energy level for the bidirectional cycling activity range.</Notes>
-                <Value type="unsigned" slope="0.01" unit="kWh" min="0" max="655"/>
+                <Value type="unsigned" slope="0.1" unit="kWh" min="0" max="6553"/>
             </Signal>
         </Message>
 
@@ -503,7 +554,7 @@
 
         <Message id="0x617" length="8" name="ADM_CS_EVCC_MEVC_Outputs" interval="1000">
             <Notes>
-                Controller (ADM-CS-EVCC and ADM-CS-MEVC hardware variant, ie. "DIN rail") has various outputs that
+                Controller (ADM-CS-EVCC and ADM-CS-MEVC hardware variant) has various outputs that
                 can be controlled through this message.
             </Notes>
 
@@ -513,7 +564,7 @@
 
             <Signal name="Digital_Output1" offset="0" length="1">
                 <Notes>
-                    Sets the logical state of DIG_OUT1 (CONN5, position 1).
+                    Sets the logical state of DIG_OUT1.
                     Needs to be declared as monitored in `/srv/config.cfg`:
 
                         [hardware]
@@ -524,7 +575,7 @@
 
             <Signal name="Digital_Output2" offset="1" length="1">
                 <Notes>
-                    Reports the logical state of DIG_OUT2 (CONN5, position 2).
+                    Reports the logical state of DIG_OUT2.
                     Needs to be declared as monitored in `/srv/config.cfg`:
 
                         [hardware]
@@ -535,7 +586,7 @@
 
             <Signal name="Digital_Output3" offset="2" length="1">
                 <Notes>
-                    Reports the logical state of DIG_OUT3 (CONN5, position 3).
+                    Reports the logical state of DIG_OUT3.
                     Needs to be declared as monitored in `/srv/config.cfg`:
 
                         [hardware]
@@ -544,8 +595,44 @@
                 <Value type="unsigned" slope="1" min="0" max="1" />
             </Signal>
 
-            <Signal name="Reserved" offset="3" length="60">
-                <Notes>Reserved bits for future uses.</Notes>
+            <Signal name="Reserved" offset="3" length="37">
+                <Notes>Padding bits between digital outputs and leds.</Notes>
+            </Signal>
+
+            <Signal name="Led1" offset="40" length="8">
+                <Notes>
+                    Sets the brightness of LED1 (3C1) in a scale from 1 to 100. 
+                    Greater values than 100 will be treated as max brigthness.
+                    Needs to be declared as monitored in `/srv/config.cfg`:
+
+                    [hardware]
+                    led1 = CAN_Controlled
+                </Notes>
+                <Value type="unsigned" slope="1" min="0" max="255"/>
+            </Signal>
+
+            <Signal name="Led2" offset="48" length="8">
+                <Notes>
+                    Sets the brightness of LED2 (3C2) in a scale from 1 to 100.
+                    Greater values than 100 will be treated as max brigthness.
+                    Needs to be declared as monitored in `/srv/config.cfg`:
+
+                    [hardware]
+                    led2 = CAN_Controlled
+                </Notes>
+                <Value type="unsigned" slope="1" min="0" max="255"/>
+            </Signal>
+
+            <Signal name="Led3" offset="56" length="8">
+                <Notes>
+                    Sets the brightness of LED3 (3C3) in a scale from 1 to 100.
+                    Greater values than 100 will be treated as max brigthness.
+                    Needs to be declared as monitored in `/srv/config.cfg`:
+
+                    [hardware]
+                    led3 = CAN_Controlled
+                </Notes>
+                <Value type="unsigned" slope="1" min="0" max="255"/>
             </Signal>
         </Message>
 
@@ -635,6 +722,249 @@
             <Signal name="CAN_Sensor_Temperature" offset="40" length="8">
                 <Notes>If using a CAN sensor, and it has a temperature channel.</Notes>
                 <Value type="unsigned" slope="1" intercept="-40" min="-40" max="215" unit="°C"/>
+            </Signal>
+        </Message>
+
+        <Message id="0x605" length="8" name="EVCC_MEVC_Diagnostic_Status" interval="100">
+            <Notes>
+                Diagnostic status of the charge controller.
+                This message gets reset to default values when the controller the state cycles back to
+                Communication_Stage.Waiting_For_EVSE
+            </Notes>
+
+            <Producer>
+                <NodeRef id="0"/>
+            </Producer>
+
+            <Signal name="LockFailure" offset="0" length="1">
+                <Notes>
+                    Indicates a failure in locking the connector.
+                </Notes>
+            </Signal>
+            <Signal name="UnlockDeclinedInletEnergized" offset="1" length="1">
+                <Notes>
+                    Unlock request declined due to voltage/current measured at the inlet.
+                </Notes>
+            </Signal>
+            <Signal name="HighTemperature" offset="2" length="1">
+                <Notes>
+                    Error due to high temperature detected.
+                </Notes>
+            </Signal>
+            <Signal name="ContactorFault" offset="3" length="1">
+                <Notes>
+                    Indicates a contactor fault. Can also be caused by wrong wiring or configuration of contactor feedbacks.
+                </Notes>
+            </Signal>
+            <Signal name="VoltageDeviation" offset="4" length="1">
+                <Notes>
+                    Voltage deviation detected beyond allowed limits.
+                </Notes>
+            </Signal>
+            <Signal name="CurrentDeviation" offset="5" length="1">
+                <Notes>
+                    Current deviation detected beyond allowed limits.
+                </Notes>
+            </Signal>
+            <Signal name="PrechargeTimeout" offset="6" length="1">
+                <Notes>
+                    Precharge process did not complete within the expected time.
+                </Notes>
+            </Signal>
+            <Signal name="ProximityPilotNotDetected" offset="7" length="1">
+                <Notes>
+                    CCS PP signal not detected.
+                </Notes>
+            </Signal>
+            <Signal name="InsertionDetectionNotDetected" offset="8" length="1">
+                <Notes>
+                    MCS ID signal not detected.
+                </Notes>
+            </Signal>
+            <Signal name="ControlPilotFault" offset="9" length="1">
+                <Notes>
+                    Fault detected on the CCS CP line.
+                </Notes>
+            </Signal>
+            <Signal name="ChargeEnableFault" offset="10" length="1">
+                <Notes>
+                    Fault detected in MCS CE line.
+                </Notes>
+            </Signal>
+            <Signal name="ControlPilotDutyCycleUnexpected" offset="11" length="1">
+                <Notes>
+                    Unexpected duty cycle detected on CCS CP line.
+                </Notes>
+            </Signal>
+            <Signal name="ControlPilotStateUnexpected" offset="12" length="1">
+                <Notes>
+                    Unexpected state detected on CCS CP line.
+                </Notes>
+            </Signal>
+            <Signal name="ChargeEnableStateUnexpected" offset="13" length="1">
+                <Notes>
+                    Unexpected state detected in MCS CE line.
+                </Notes>
+            </Signal>
+            <Signal name="ControlPilotStateNotSupported" offset="14" length="1">
+                <Notes>
+                    CCS CP state not supported by the system.
+                </Notes>
+            </Signal>
+            <Signal name="PLCFault" offset="15" length="1">
+                <Notes>
+                    Power Line Communication (PLC) fault detected.
+                    This is a generic flag, for more specific information (when available) refer to the V2GTP* flags below.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPTLSError" offset="16" length="1">
+                <Notes>
+                    V2GTP TLS error occurred during communication.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPAuthorizationFailure" offset="17" length="1">
+                <Notes>
+                    V2GTP authorization process failed.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPServiceSelectionFailure" offset="18" length="1">
+                <Notes>
+                    V2GTP service selection failed.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPProtocolVersionInvalid" offset="19" length="1">
+                <Notes>
+                    Invalid V2GTP protocol version detected.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPSessionIDUnexpected" offset="20" length="1">
+                <Notes>
+                    Unexpected V2GTP session ID encountered.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPPayloadInvalid" offset="21" length="1">
+                <Notes>
+                    Invalid payload detected in V2GTP communication.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPEnergyTransferModeNotSupported" offset="22" length="1">
+                <Notes>
+                    V2GTP energy transfer mode not supported.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPSequenceError" offset="23" length="1">
+                <Notes>
+                    Sequence error detected in V2GTP communication.
+                </Notes>
+            </Signal>
+            <Signal name="V2GTPSequenceTimeout" offset="24" length="1">
+                <Notes>
+                    Timeout occurred in V2GTP sequence.
+                </Notes>
+            </Signal>
+            <Signal name="SDPError" offset="25" length="1">
+                <Notes>
+                    Service Discovery Protocol (SDP) error detected.
+                </Notes>
+            </Signal>
+
+            <Signal name="Reserved_Flags" offset="26" length="22">
+                <Notes>Reserved bits for future uses.</Notes>
+            </Signal>
+
+            <Signal name="HLC_ResponseCode" offset="48" length="8">
+                <Notes>
+                    High-Level Communication (HLC) response codes for EVSE communication protocols.
+                </Notes>
+                <LabelSet>
+                    <Label name="Undefined" value="0" />
+                    <Label name="OK" value="1" />
+                    <Label name="OK_CertificateExpiresSoon" value="2" />
+                    <Label name="OK_NewSessionEstablished" value="3" />
+                    <Label name="OK_OldSessionJoined" value="4" />
+                    <Label name="OK_PowerToleranceConfirmed" value="5" />
+                    <Label name="WARNING_AuthorizationSelectionInvalid" value="6" />
+                    <Label name="WARNING_CertificateExpired" value="7" />
+                    <Label name="WARNING_CertificateNotYetValid" value="8" />
+                    <Label name="WARNING_CertificateRevoked" value="9" />
+                    <Label name="WARNING_CertificateValidationError" value="10" />
+                    <Label name="WARNING_ChallengeInvalid" value="11" />
+                    <Label name="WARNING_EIMAuthorizationFailure" value="12" />
+                    <Label name="WARNING_eMSPUnknown" value="13" />
+                    <Label name="WARNING_EVPowerProfileViolation" value="14" />
+                    <Label name="WARNING_GeneralPnCAuthorizationError" value="15" />
+                    <Label name="WARNING_NoCertificateAvailable" value="16" />
+                    <Label name="WARNING_NoContractMatchingPCIDFound" value="17" />
+                    <Label name="WARNING_PowerToleranceNotConfirmed" value="18" />
+                    <Label name="WARNING_ScheduleRenegotiationFailed" value="19" />
+                    <Label name="WARNING_StandbyNotAllowed" value="20" />
+                    <Label name="WARNING_WPT" value="21" />
+                    <Label name="FAILED" value="22" />
+                    <Label name="FAILED_AssociationError" value="23" />
+                    <Label name="FAILED_ContactorError" value="24" />
+                    <Label name="FAILED_EVPowerProfileInvalid" value="25" />
+                    <Label name="FAILED_EVPowerProfileViolation" value="26" />
+                    <Label name="FAILED_MeteringSignatureNotValid" value="27" />
+                    <Label name="FAILED_NoEnergyTransferServiceSelected" value="28" />
+                    <Label name="FAILED_NoServiceRenegotiationSupported" value="29" />
+                    <Label name="FAILED_PauseNotAllowed" value="30" />
+                    <Label name="FAILED_PowerDeliveryNotApplied" value="31" />
+                    <Label name="FAILED_PowerToleranceNotConfirmed" value="32" />
+                    <Label name="FAILED_ScheduleRenegotiation" value="33" />
+                    <Label name="FAILED_ScheduleSelectionInvalid" value="34" />
+                    <Label name="FAILED_SequenceError" value="35" />
+                    <Label name="FAILED_ServiceIDInvalid" value="36" />
+                    <Label name="FAILED_ServiceSelectionInvalid" value="37" />
+                    <Label name="FAILED_SignatureError" value="38" />
+                    <Label name="FAILED_UnknownSession" value="39" />
+                    <Label name="FAILED_WrongChargeParameter" value="40" />
+                    <Label name="FAILED_PaymentSelectionInvalid" value="41" />
+                    <Label name="FAILED_CertificateExpired" value="42" />
+                    <Label name="FAILED_CertChainError" value="43" />
+                    <Label name="FAILED_ChallengeInvalid" value="44" />
+                    <Label name="FAILED_ContractCanceled" value="45" />
+                    <Label name="FAILED_TariffSelectionInvalid" value="46" />
+                    <Label name="FAILED_ChargingProfileInvalid" value="47" />
+                    <Label name="FAILED_NoChargeServiceSelected" value="48" />
+                    <Label name="FAILED_WrongEnergyTransferMode" value="49" />
+                    <Label name="FAILED_CertificateNotAllowedAtThisEVSE" value="50" />
+                    <Label name="FAILED_CertificateRevoked" value="51" />
+                    <Label name="FAILED_EVSEPresentVoltageToLow" value="52" />
+                    <Label name="FAILED_WrongEnergyTransferType" value="53" />
+                </LabelSet>
+            </Signal>
+
+            <Signal name="EVSE_StatusCode" offset="56" length="4">
+                <Notes>
+                    Only relevant for DIN SPEC 70121 and ISO 15118-2 protocols.
+                    (was removed in ISO 15118-20)
+                </Notes>
+                <LabelSet>
+                    <Label name="Undefined" value="0" />
+                    <Label name="EVSE_NotReady" value="1" />
+                    <Label name="EVSE_Ready" value="2" />
+                    <Label name="EVSE_Shutdown" value="3" />
+                    <Label name="EVSE_UtilityInterruptEvent" value="4" />
+                    <Label name="EVSE_IsolationMonitoringActive" value="5" />
+                    <Label name="EVSE_EmergencyShutdown" value="6" />
+                    <Label name="EVSE_Malfunction" value="7" />
+                    <Label name="Invalid" value="8" />
+                </LabelSet>
+            </Signal>
+
+            <Signal name="EVSE_Isolation_Level" offset="60" length="4">
+                <Notes>
+                    Only relevant for DIN SPEC 70121 and ISO 15118-2 protocols.
+                    (was removed in ISO 15118-20)
+                </Notes>
+                <LabelSet>
+                    <Label name="Undefined" value="0" />
+                    <Label name="Invalid" value="1" />
+                    <Label name="Valid" value="2" />
+                    <Label name="Warning" value="3" />
+                    <Label name="Fault" value="4" />
+                    <Label name="No_IMD" value="5" />
+                </LabelSet>
             </Signal>
         </Message>
     </Bus>
