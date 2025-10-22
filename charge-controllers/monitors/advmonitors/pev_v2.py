@@ -92,6 +92,7 @@ class VehicleStatus:
     dc_emergency_stop: str
     dc_battery_voltage: float
     dc_inlet_voltage: float
+    hv_preparing_hold_off: str
 
 
 enable_can_log = False
@@ -190,6 +191,7 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             dc_emergency_stop='----',
             dc_battery_voltage=0,
             dc_inlet_voltage=0,
+            hv_preparing_hold_off='----',
         )
         self._app.update_vehicle_status(self.vehicle_status)
 
@@ -274,6 +276,9 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
+
+        elif message.name == 'EV_Status':
+            self.vehicle_status.hv_preparing_hold_off = str(signals['HV_Preparing_Hold_Off'])
 
         elif message.name == 'EV_Energy_Request':
             self.vehicle_parameters.target_energy_request = float(signals['Target_Energy_Request'])
@@ -486,6 +491,7 @@ class Application:
         table.add_row('[b]DC emergency stop:[/]', data.dc_emergency_stop)
         table.add_section()
         table.add_row('[b]AC vehicle ready:[/]', self._color_flag(data.ac_vehicle_ready))
+        table.add_row('[b]HV preparing hold off:[/]', f'{data.hv_preparing_hold_off}')
         self.layout['First']['vehicle-status'].update(Panel(table, title='Vehicle Status'))
 
     def _color_flag(self, flag: str, not_prefix: str = 'Not_', *, invert: bool = False) -> str:
