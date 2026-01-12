@@ -7,12 +7,13 @@
 # spell-checker:ignore cantools EVSE EVCC exctype excinst exctb
 from __future__ import annotations
 
-# System imports
 import os
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING
 from datetime import datetime
+
+# System imports
+from importlib import resources
+from typing import TYPE_CHECKING
 
 # Third-party imports
 import can
@@ -28,10 +29,22 @@ from rich.table import Table
 # Local imports
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from types import TracebackType
     from typing import Any, Self
 
     from rich.console import ConsoleOptions, RenderResult
+
+
+CAN_CONFIGS: dict[str, Path] = {
+    path.name: path for path in (resources.files('advmonitors') / 'conf').iterdir()
+}
+DEFAULT_CAN_CONFIG = CAN_CONFIGS['can.conf']
+DEFAULT_VCAN_CONFIG = CAN_CONFIGS['vcan.conf']
+
+CAN_DBS: dict[str, Path] = {
+    path.name: path for path in (resources.files('advmonitors') / 'dbs').iterdir()
+}
 
 
 @dataclass
@@ -57,16 +70,6 @@ class ChargerStatus:
 
 
 @dataclass
-class VehicleParameters:
-    target_energy_request: float
-    min_energy_request: float
-    max_energy_request: float
-    min_v2x_energy_request: float
-    max_v2x_energy_request: float
-    departure_time: int
-
-
-@dataclass
 class SessionStatus:
     communication_stage: str
     protocol: str
@@ -81,7 +84,6 @@ class SessionStatus:
 @dataclass
 class VehicleStatus:
     soc: int
-    energy_capacity: float
     ac_vehicle_ready: str
     dc_current_request: float
     dc_present_current: float
@@ -93,30 +95,32 @@ class VehicleStatus:
 
 enable_can_log = False
 logged_messages = {}
-log_filename = f"./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"
+log_filename = f'./pev_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
 
 
-def log_can_msg(msg_name, signals, senders=None):
+def log_can_msg(msg_name, signals, senders=None) -> None:
     if not enable_can_log:
         return
 
-    if msg_name in logged_messages:
-        if logged_messages[msg_name] == signals:
-            # The same message is logged with the same body last time, do not repeat
-            return
+    if msg_name in logged_messages and logged_messages[msg_name] == signals:
+        # The same message is logged with the same body last time, do not repeat
+        return
 
     with open(log_filename, 'a') as file:
-        file.write(f"{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n")
+        file.write(
+            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n'
+        )
     logged_messages[msg_name] = signals
 
 
-class AdvanticsPEVInterfaceV2(can.Listener):
+class AdvanticsPEVInterfaceV1(can.Listener):
     def __init__(self, app: Application) -> None:
         self._app = app
         self._bus = app.bus
-        self._db: cantools.database.Database = cantools.database.load_file(
-            'Advantics_Generic_PEV_protocol_v2.kcd',
-        )  # type: ignore[reportAttributeAccessIssue]
+        can_db_path = (
+            resources.files('advmonitors') / 'dbs' / 'Advantics_Generic_PEV_protocol_v1.kcd'
+        )
+        self._db: cantools.database.Database = cantools.database.load_file(can_db_path)
 
         self._bus.set_filters(
             [
@@ -151,16 +155,6 @@ class AdvanticsPEVInterfaceV2(can.Listener):
         )
         self._app.update_charger_status(self.charger_status)
 
-        self.vehicle_parameters = VehicleParameters(
-            target_energy_request=0,
-            min_energy_request=0,
-            max_energy_request=0,
-            min_v2x_energy_request=0,
-            max_v2x_energy_request=0,
-            departure_time=0,
-        )
-        self._app.update_vehicle_parameters(self.vehicle_parameters)
-
         self.session_status = SessionStatus(
             communication_stage='----',
             protocol='----',
@@ -175,7 +169,6 @@ class AdvanticsPEVInterfaceV2(can.Listener):
 
         self.vehicle_status = VehicleStatus(
             soc=0,
-            energy_capacity=0,
             ac_vehicle_ready='----',
             dc_current_request=0,
             dc_present_current=0,
@@ -224,14 +217,14 @@ class AdvanticsPEVInterfaceV2(can.Listener):
 
         elif message.name == 'ADM_CS_EVCC_Inputs':
             self.vehicle_control.dc_contactor_pos_fb = str(
-                signals['DC_Contactor_Positive_Feedback']
+                signals['DC_Contactor_Positive_Feedback'],
             )
             self.vehicle_control.dc_contactor_neg_fb = str(
-                signals['DC_Contactor_Negative_Feedback']
+                signals['DC_Contactor_Negative_Feedback'],
             )
             self.vehicle_control.digital_inputs = (
-                f'1:{"H" if signals['Digital_Input1'] else "L"} '
-                f'2:{"H" if signals['Digital_Input2'] else "L"}'
+                f'1:{"H" if signals["Digital_Input1"] else "L"} '
+                f'2:{"H" if signals["Digital_Input2"] else "L"}'
             )
             self.vehicle_control.stop_charge = str(signals['Stop_Charge'])
             self.vehicle_control.ptc0 = int(signals['PTC0'])
@@ -246,7 +239,6 @@ class AdvanticsPEVInterfaceV2(can.Listener):
 
         elif message.name == 'EV_Information':
             self.vehicle_status.soc = int(signals['State_of_Charge'])
-            self.vehicle_status.energy_capacity = float(signals['Energy_Capacity'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'AC_Status':
@@ -265,25 +257,6 @@ class AdvanticsPEVInterfaceV2(can.Listener):
             self.vehicle_status.dc_inlet_voltage = float(signals['Inlet_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
 
-        elif message.name == 'EV_Energy_Request':
-            self.vehicle_parameters.target_energy_request = float(signals['Target_Energy_Request'])
-            self.vehicle_parameters.min_energy_request = float(signals['Minimum_Energy_Request'])
-            self.vehicle_parameters.max_energy_request = float(signals['Maximum_Energy_Request'])
-            self._app.update_vehicle_parameters(self.vehicle_parameters)
-
-        elif message.name == 'EV_V2X_Energy_Request':
-            self.vehicle_parameters.min_v2x_energy_request = float(
-                signals['Minimum_V2X_Energy_Request']
-            )
-            self.vehicle_parameters.max_v2x_energy_request = float(
-                signals['Maximum_V2X_Energy_Request']
-            )
-            self._app.update_vehicle_parameters(self.vehicle_parameters)
-
-        elif message.name == 'EV_Extra_BPT_Information':
-            self.vehicle_parameters.departure_time = int(signals['Departure_Time'])
-            self._app.update_vehicle_parameters(self.vehicle_parameters)
-
     def on_error(self, exc: Exception) -> None:
         self._app.live.stop()
         raise exc
@@ -295,7 +268,7 @@ class RenderableConsole(Console):
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         texts = self.export_text(clear=False).split('\n')
-        yield from texts[-options.height:]
+        yield from texts[-options.height :]
 
 
 class Application:
@@ -304,7 +277,7 @@ class Application:
         self._interface_config = interface_config
         self._bus: can.BusABC | None = None
         self._notifier: can.Notifier | None = None
-        self._pev: AdvanticsPEVInterfaceV2 | None = None
+        self._pev: AdvanticsPEVInterfaceV1 | None = None
 
         self.console = RenderableConsole()
         self.layout = self._make_layout()
@@ -324,8 +297,7 @@ class Application:
         )
         layout['Second'].split_row(
             Layout(name='charger-status'),
-            Layout(name='vehicle-parameters'),
-            Layout(Panel(self.console, title='Console'), name='placeholder1'),
+            Layout(Panel(self.console, title='Console'), name='placeholder1', ratio=2),
         )
 
         return layout
@@ -338,9 +310,9 @@ class Application:
         return bus
 
     @property
-    def pev(self) -> AdvanticsPEVInterfaceV2:
+    def pev(self) -> AdvanticsPEVInterfaceV1:
         if (pev := self._pev) is None:
-            pev = self._pev = AdvanticsPEVInterfaceV2(self, **self._interface_config)
+            pev = self._pev = AdvanticsPEVInterfaceV1(self, **self._interface_config)
 
         return pev
 
@@ -370,10 +342,10 @@ class Application:
         return self
 
     def __exit__(
-            self,
-            exctype: type[BaseException] | None,
-            excinst: BaseException | None,
-            exctb: TracebackType | None,
+        self,
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
     ) -> bool:
         self.shutdown()
         return False
@@ -418,21 +390,6 @@ class Application:
         )
         self.layout['Second']['charger-status'].update(Panel(table, title='Charger Status'))
 
-    def update_vehicle_parameters(self, data: VehicleParameters) -> None:
-        table = Table.grid(expand=True)
-        table.box = box.HORIZONTALS
-        table.add_column()
-        table.add_column()
-        table.add_row('[b]Target energy request:[/]', f'{data.target_energy_request:.2f} kWh')
-        table.add_row('[b]Minimum energy request:[/]', f'{data.min_energy_request:.2f} kWh')
-        table.add_row('[b]Maximum energy request:[/]', f'{data.max_energy_request:.2f} kWh')
-        table.add_section()
-        table.add_row('[b]Minimum V2X energy request:[/]', f'{data.min_v2x_energy_request:.2f} kWh')
-        table.add_row('[b]Maximum V2X energy request:[/]', f'{data.max_v2x_energy_request:.2f} kWh')
-        table.add_section()
-        table.add_row('[b]Departure time:[/]', f'{data.departure_time} s')
-        self.layout['Second']['vehicle-parameters'].update(Panel(table, title='Vehicle Parameters'))
-
     def update_session_status(self, data: SessionStatus) -> None:
         table = Table.grid(expand=True)
         table.box = box.HORIZONTALS
@@ -455,7 +412,6 @@ class Application:
         table.add_column()
         table.add_column()
         table.add_row('[b]State of charge:[/]', f'{data.soc} %')
-        table.add_row('[b]Energy capacity:[/]', f'{data.energy_capacity:0.2f} kWh')
         table.add_section()
         table.add_row('[b]DC inlet voltage:[/]', f'{data.dc_inlet_voltage:0.2f} V')
         table.add_row('[b]DC battery voltage:[/]', f'{data.dc_battery_voltage:0.2f} V')
@@ -482,14 +438,12 @@ class Application:
         return ios.replace('H', '[green]H[/]').replace('L', '[red]L[/]')
 
 
-def cli_main(
-        can_config: Path = Path('can.conf'),
-        enable_can_logging: bool = False
-) -> None:
+def cli_main(can_config: str = 'can.conf', enable_can_logging: bool = False) -> None:
     global enable_can_log
     enable_can_log = enable_can_logging
+    can_config_path = resources.files('advmonitors') / 'conf' / can_config
     try:
-        bus_config = can.util.load_config(path=can_config)
+        bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
@@ -498,5 +452,9 @@ def cli_main(
         app.display()
 
 
-if __name__ == '__main__':
+def main() -> None:
     typer.run(cli_main)
+
+
+if __name__ == '__main__':
+    main()

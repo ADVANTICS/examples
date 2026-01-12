@@ -7,19 +7,21 @@
 # spell-checker:ignore cantools EVSE SECC SLAC OCPP CHAdeMO exctype excinst exctb asciichartpy
 from __future__ import annotations
 
-# System imports
 import os
 from collections import deque
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING
 from datetime import datetime
+
+# System imports
+from importlib import resources
+from typing import TYPE_CHECKING
 
 # Third-party imports
 import asciichartpy
 import can
 import cantools.database
 import typer
+from cantools.database.errors import DecodeError
 from rich import box, print
 from rich.console import Console
 from rich.layout import Layout
@@ -94,8 +96,12 @@ class VehicleStatus:
     ready: str
     battery_capacity: int
     soc: int
+    min_soc: int
+    target_soc: int
+    max_soc: int
     min_voltage: float
     max_voltage: float
+    present_voltage: float
     min_charge_current: float
     max_charge_current: float
     min_charge_power: int
@@ -104,24 +110,28 @@ class VehicleStatus:
     max_discharge_current: float
     min_discharge_power: int
     max_discharge_power: int
+    min_energy_request: float
+    max_energy_request: float
+    target_energy_request: float
 
 
 enable_can_log = False
 logged_messages = {}
-log_filename = f"./evse_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"
+log_filename = f'./evse_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
 
 
-def log_can_msg(msg_name, signals, senders=None):
+def log_can_msg(msg_name, signals, senders=None) -> None:
     if not enable_can_log:
         return
 
-    if msg_name in logged_messages:
-        if logged_messages[msg_name] == signals:
-            # The same message is logged with the same body last time, do not repeat
-            return
+    if msg_name in logged_messages and logged_messages[msg_name] == signals:
+        # The same message is logged with the same body last time, do not repeat
+        return
 
     with open(log_filename, 'a') as file:
-        file.write(f"{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n")
+        file.write(
+            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")}\t{senders}\t{msg_name}\t{signals}\n'
+        )
     logged_messages[msg_name] = signals
 
 
@@ -130,17 +140,20 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         self._app = app
         self._bus = app.bus
         self._index = pistol_index
-        self._db: cantools.database.Database = cantools.database.load_file(
-            'Advantics_Generic_EVSE_protocol_v3.kcd',
-        )  # type: ignore[reportAttributeAccessIssue]
+        can_db_path = (
+            resources.files('advmonitors') / 'dbs' / 'Advantics_Generic_EVSE_protocol_v3.kcd'
+        )
+        self._db: cantools.database.Database = cantools.database.load_file(can_db_path)
 
         self._bus.set_filters(
             [
-                can.typechecking.CanFilterExtended(
-                    can_id=message.frame_id | ((self._index & 0x0F) << 24),
-                    can_mask=0x1FFFFFFF,
-                    extended=True,
-                )
+                # can.typechecking.CanFilterExtended(
+                {
+                    'can_id': message.frame_id | ((self._index & 0x0F) << 24),
+                    'can_mask': 0x1FFFFFFF,
+                    'extended': True,
+                }
+                # )
                 for message in self._db.messages
                 # if message.frame_id & (1 << 15)
             ],
@@ -200,8 +213,12 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
             ready='----',
             battery_capacity=0,
             soc=0,
+            min_soc=0,
+            target_soc=0,
+            max_soc=0,
             min_voltage=0,
             max_voltage=0,
+            present_voltage=0,
             min_charge_current=0,
             max_charge_current=0,
             min_charge_power=0,
@@ -210,15 +227,18 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
             max_discharge_current=0,
             min_discharge_power=0,
             max_discharge_power=0,
+            min_energy_request=0,
+            max_energy_request=0,
+            target_energy_request=0,
         )
         self._app.update_vehicle_status(self.vehicle_status)
 
     def on_message_received(self, msg: can.Message) -> None:  # noqa: C901, PLR0912, PLR0915
         try:
             message = self._db.get_message_by_frame_id(msg.arbitration_id & 0xFFFFFF)
-        except KeyError:
+            signals = message.decode(msg.data)
+        except (KeyError, DecodeError):
             return
-        signals = message.decode(msg.data)
 
         log_can_msg(message.name, signals, message.senders)
 
@@ -258,11 +278,15 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         elif message.name == 'EV_Information_Battery':
             self.vehicle_status.battery_capacity = int(signals['Battery_Capacity'])
             self.vehicle_status.soc = int(signals['Present_State_of_Charge'])
+            self.vehicle_status.min_soc = int(signals['Minimum_State_of_Charge'])
+            self.vehicle_status.target_soc = int(signals['Target_State_of_Charge'])
+            self.vehicle_status.max_soc = int(signals['Maximum_State_of_Charge'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'EV_Information_Voltages':
             self.vehicle_status.min_voltage = float(signals['EV_Minimum_Voltage'])
             self.vehicle_status.max_voltage = float(signals['EV_Maximum_Voltage'])
+            self.vehicle_status.present_voltage = float(signals['EV_Present_Voltage'])
             self._app.update_vehicle_status(self.vehicle_status)
 
         elif message.name == 'EV_Information_Charge_Limits':
@@ -274,23 +298,29 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
 
         elif message.name == 'EV_Information_Discharge_Limits':
             self.vehicle_status.min_discharge_current = float(
-                signals['EV_Minimum_Discharge_Current']
+                signals['EV_Minimum_Discharge_Current'],
             )
             self.vehicle_status.max_discharge_current = float(
-                signals['EV_Maximum_Discharge_Current']
+                signals['EV_Maximum_Discharge_Current'],
             )
             self.vehicle_status.min_discharge_power = int(signals['EV_Minimum_Discharge_Power'])
             self.vehicle_status.max_discharge_power = int(signals['EV_Maximum_Discharge_Power'])
             self._app.update_vehicle_status(self.vehicle_status)
 
+        elif message.name == 'EV_Information_Energy':
+            self.vehicle_status.min_energy_request = float(signals['EV_Minimum_Energy_Request'])
+            self.vehicle_status.target_energy_request = float(signals['EV_Target_Energy_Request'])
+            self.vehicle_status.max_energy_request = float(signals['EV_Maximum_Energy_Request'])
+            self._app.update_vehicle_status(self.vehicle_status)
+
         elif message.name == 'ADM_CO_CUI1_Inputs':
             self.charger_status.digital_inputs = (
-                f'0:{"H" if signals['SWITCH0'] else "L"} '
-                f'1:{"H" if signals['SWITCH1'] else "L"} '
-                f'2:{"H" if signals['SWITCH2'] else "L"} '
-                f'3:{"H" if signals['SWITCH3'] else "L"} '
-                f'4:{"H" if signals['SWITCH4'] else "L"} '
-                f'5:{"H" if signals['SWITCH5'] else "L"}'
+                f'0:{"H" if signals["SWITCH0"] else "L"} '
+                f'1:{"H" if signals["SWITCH1"] else "L"} '
+                f'2:{"H" if signals["SWITCH2"] else "L"} '
+                f'3:{"H" if signals["SWITCH3"] else "L"} '
+                f'4:{"H" if signals["SWITCH4"] else "L"} '
+                f'5:{"H" if signals["SWITCH5"] else "L"}'
             )
             self.charger_status.cpu_temp = int(signals['CPU_Temperature'])
             self.charger_status.pistol_ptc1 = int(signals['Pistol_PTC1'])
@@ -299,10 +329,10 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
 
         elif message.name == 'ADM_CS_SECC_Inputs':
             self.charger_status.digital_inputs = (
-                f'1:{"H" if signals['Digital_Input1'] else "L"} '
-                f'2:{"H" if signals['Digital_Input2'] else "L"} '
-                f'3:{"H" if signals['Digital_Input3'] else "L"} '
-                f'4:{"H" if signals['Digital_Input4'] else "L"}'
+                f'1:{"H" if signals["Digital_Input1"] else "L"} '
+                f'2:{"H" if signals["Digital_Input2"] else "L"} '
+                f'3:{"H" if signals["Digital_Input3"] else "L"} '
+                f'4:{"H" if signals["Digital_Input4"] else "L"}'
             )
             self.charger_status.cpu_temp = int(signals['CPU_Temperature'])
             self.charger_status.pistol_ptc1 = int(signals['Pistol_PTC1'])
@@ -328,22 +358,22 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
         elif message.name == 'DC_Power_Parameters':
             self.charger_parameters.maximum_voltage = float(signals['Maximum_Voltage'])
             self.charger_parameters.maximum_charge_current = float(
-                signals['Maximum_Charge_Current']
+                signals['Maximum_Charge_Current'],
             )
             self.charger_parameters.maximum_discharge_current = float(
-                signals['Maximum_Discharge_Current']
+                signals['Maximum_Discharge_Current'],
             )
             self.charger_parameters.range_target_current = float(signals['Range_Target_Current'])
             self._app.update_charger_parameters(self.charger_parameters)
 
         elif message.name == 'Sequence_Control':
             self.charger_parameters.start_charge_authorisation = str(
-                signals['Start_Charge_Authorisation']
+                signals['Start_Charge_Authorisation'],
             )
             self.charger_parameters.chademo_start_button = str(signals['CHAdeMO_Start_Button'])
             self.charger_parameters.ccs_authorisation_done = str(signals['CCS_Authorisation_Done'])
             self.charger_parameters.ccs_authorisation_valid = str(
-                signals['CCS_Authorisation_Valid']
+                signals['CCS_Authorisation_Valid'],
             )
             self.charger_parameters.charge_parameters_done = str(signals['Charge_Parameters_Done'])
             self.charger_parameters.user_stop_button = str(signals['User_Stop_Button'])
@@ -351,10 +381,10 @@ class AdvanticsEVSEInterfaceV3(can.Listener):
 
         elif message.name == 'ADM_CS_SECC_Outputs':
             self.charger_parameters.digital_outputs = (
-                f'1:{"H" if signals['Digital_Output1'] else "L"} '
-                f'2:{"H" if signals['Digital_Output2'] else "L"} '
-                f'3:{"H" if signals['Digital_Output3'] else "L"} '
-                f'4:{"H" if signals['Digital_Output4'] else "L"}'
+                f'1:{"H" if signals["Digital_Output1"] else "L"} '
+                f'2:{"H" if signals["Digital_Output2"] else "L"} '
+                f'3:{"H" if signals["Digital_Output3"] else "L"} '
+                f'4:{"H" if signals["Digital_Output4"] else "L"}'
             )
             self._app.update_charger_parameters(self.charger_parameters)
 
@@ -378,17 +408,17 @@ class RenderableConsole(Console):
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         texts = self.export_text(clear=False).split('\n')
-        yield from texts[-options.height:]
+        yield from texts[-options.height :]
 
 
 class PlotPanel:
     def __init__(
-            self,
-            app: Application,
-            kind: str,
-            unit: str,
-            color: str = '',
-            ratio: int = 2,
+        self,
+        app: Application,
+        kind: str,
+        unit: str,
+        color: str = '',
+        ratio: int = 2,
     ) -> None:
         self._app = app
         self._data: deque[float] = deque(maxlen=500)
@@ -538,10 +568,10 @@ class Application:
         return self
 
     def __exit__(
-            self,
-            exctype: type[BaseException] | None,
-            excinst: BaseException | None,
-            exctb: TracebackType | None,
+        self,
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
     ) -> bool:
         self.shutdown()
         return False
@@ -593,7 +623,10 @@ class Application:
         table.add_column()
         table.add_row('[b]Maximum voltage:[/]', f'{data.maximum_voltage:.2f} V')
         table.add_row('[b]Maximum charge current:[/]', f'{data.maximum_charge_current:.2f} A')
-        table.add_row('[b]Maximum discharge current:[/]', f'{data.maximum_discharge_current:.2f} A')
+        table.add_row(
+            '[b]Maximum discharge current:[/]',
+            f'{data.maximum_discharge_current:.2f} A',
+        )
         table.add_row('[b]Range target current:[/]', f'{data.range_target_current:.2f} A')
         table.add_section()
         table.add_row(
@@ -640,9 +673,13 @@ class Application:
         table.add_section()
         table.add_row('[b]Battery capacity:[/]', f'{data.battery_capacity} kWh')
         table.add_row('[b]State of charge:[/]', f'{data.soc} %')
+        table.add_row('[b]Min State of charge:[/]', f'{data.min_soc} %')
+        table.add_row('[b]Target State of charge:[/]', f'{data.target_soc} %')
+        table.add_row('[b]Max State of charge:[/]', f'{data.max_soc} %')
         table.add_section()
         table.add_row('[b]Min voltage:[/]', f'{data.min_voltage:0.2f} V')
         table.add_row('[b]Max voltage:[/]', f'{data.max_voltage:0.2f} V')
+        table.add_row('[b]Present voltage:[/]', f'{data.present_voltage:0.2f} V')
         table.add_section()
         table.add_row('[b]Min charge current:[/]', f'{data.min_charge_current:0.2f} A')
         table.add_row('[b]Max charge current:[/]', f'{data.max_charge_current:0.2f} A')
@@ -653,15 +690,19 @@ class Application:
         table.add_row('[b]Max discharge current:[/]', f'{data.max_discharge_current:0.2f} A')
         table.add_row('[b]Min discharge power:[/]', f'{data.min_discharge_power} kW')
         table.add_row('[b]Max discharge power:[/]', f'{data.max_discharge_power} kW')
+        table.add_section()
+        table.add_row('[b]Min energy request:[/]', f'{data.min_energy_request:0.2f} kWh')
+        table.add_row('[b]Target energy request:[/]', f'{data.target_energy_request:0.2f} kWh')
+        table.add_row('[b]Max energy request:[/]', f'{data.max_energy_request:0.2f} kWh')
         self.layout['First']['vehicle-status'].update(Panel(table, title='Vehicle Status'))
 
     def update_wait_on(  # noqa: C901, PLR0912, PLR0915
-            self,
-            charger_control: ChargerControl,
-            charger_status: ChargerStatus,
-            charger_parameters: ChargerParameters,
-            session_status: SessionStatus,
-            vehicle_status: VehicleStatus,
+        self,
+        charger_control: ChargerControl,
+        charger_status: ChargerStatus,
+        charger_parameters: ChargerParameters,
+        session_status: SessionStatus,
+        vehicle_status: VehicleStatus,
     ) -> None:
         def _update_status(text: str) -> None:
             self.layout['Hints'].update(Text(text, style='black on white'))
@@ -775,8 +816,7 @@ class Application:
 
             elif charger_control.power_function == 'Standby':
                 _update_status(
-                    'Vehicle should have closed its contactors. '
-                    'Waiting for it to start charging.',
+                    'Vehicle should have closed its contactors. Waiting for it to start charging.',
                 )
 
             else:
@@ -794,7 +834,11 @@ class Application:
 
                 if charger_control.setpoints_mode == 'Target_Mode':
                     target_current = charger_control.current_range_max
-                    if (target_current * 0.8) <= charger_status.present_current <= (target_current * 1.1):
+                    if (
+                        (target_current * 0.8)
+                        <= charger_status.present_current
+                        <= (target_current * 1.1)
+                    ):
                         _update_status(f'{direction}! Waiting for charge to stop.')
                     else:
                         _update_status(
@@ -876,14 +920,15 @@ class Application:
 
 
 def cli_main(
-        can_config: Path = Path('can.conf'),
-        pistol_index: int = 1,
-        enable_can_logging: bool = False
+    can_config: str = 'can.conf',
+    pistol_index: int = 1,
+    enable_can_logging: bool = False,
 ) -> None:
     global enable_can_log
     enable_can_log = enable_can_logging
+    can_config_path = resources.files('advmonitors') / 'conf' / can_config
     try:
-        bus_config = can.util.load_config(path=can_config)
+        bus_config = can.util.load_config(path=can_config_path)
     except can.exceptions.CanInterfaceNotImplementedError as ex:
         print(f'[red]ERROR:[/] Incorrect CAN configuration. {ex}.')
         raise typer.Abort from ex
@@ -892,5 +937,9 @@ def cli_main(
         app.display()
 
 
-if __name__ == '__main__':
+def main() -> None:
     typer.run(cli_main)
+
+
+if __name__ == '__main__':
+    main()

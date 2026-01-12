@@ -107,6 +107,7 @@
                     <Label name="CCS_DC_Extended" value="1" />
                     <Label name="CHAdeMO" value="2" />
                     <Label name="CCS_AC" value="3" />
+                    <Label name="MCS" value="4" />
                 </LabelSet>
             </Signal>
         </Message>
@@ -446,12 +447,15 @@
             </Signal>
         </Message>
 
-        <Message id="0x6B100" length="3" name="EV_Information_Battery" format="extended">
+        <Message id="0x6B100" length="6" name="EV_Information_Battery" format="extended">
             <Notes><![CDATA[
                 Vehicle battery information.
 
                 Sent at least once after first <<New_Charge_Session>> message. As well as every time
                 vehicle changes these information.
+
+                Many of these information can be optional. There default value is 0 if the vehicle
+                did not send them.
             ]]></Notes>
 
             <Producer>
@@ -459,22 +463,40 @@
             </Producer>
 
             <Signal name="Battery_Capacity" offset="0" length="16">
-                <Notes>Total battery capacity (if provided).</Notes>
+                <Notes>Total battery capacity.</Notes>
                 <Value type="unsigned" slope="1" unit="kWh" />
             </Signal>
 
             <Signal name="Present_State_of_Charge" offset="16" length="8">
-                <Notes>Battery SoC in percent (informative, do not rely on it).</Notes>
+                <Notes>Battery SoC, in percent.</Notes>
+                <Value type="unsigned" slope="1" unit="%" min="0" max="100" />
+            </Signal>
+
+            <Signal name="Minimum_State_of_Charge" offset="24" length="8">
+                <Notes>Minimum battery SoC vehicle wants, in percent.</Notes>
+                <Value type="unsigned" slope="1" unit="%" min="0" max="100" />
+            </Signal>
+
+            <Signal name="Target_State_of_Charge" offset="32" length="8">
+                <Notes>Target battery SoC vehicle wants, in percent.</Notes>
+                <Value type="unsigned" slope="1" unit="%" min="0" max="100" />
+            </Signal>
+
+            <Signal name="Maximum_State_of_Charge" offset="40" length="8">
+                <Notes>Maximum battery SoC vehicle wants, in percent.</Notes>
                 <Value type="unsigned" slope="1" unit="%" min="0" max="100" />
             </Signal>
         </Message>
 
-        <Message id="0x6B101" length="4" name="EV_Information_Voltages" format="extended">
+        <Message id="0x6B101" length="6" name="EV_Information_Voltages" format="extended">
             <Notes><![CDATA[
                 Vehicle voltages information.
 
                 Sent at least once after first <<New_Charge_Session>> message. As well as every time
                 vehicle changes these information.
+
+                Many of these information can be optional. There default value is 0 if the vehicle
+                did not send them.
             ]]></Notes>
 
             <Producer>
@@ -482,12 +504,21 @@
             </Producer>
 
             <Signal name="EV_Minimum_Voltage" offset="0" length="16">
-                <Notes>Minimum vehicle voltage (if provided).</Notes>
+                <Notes>Minimum vehicle voltage.</Notes>
                 <Value type="unsigned" slope="0.1" unit="Volts" />
             </Signal>
 
             <Signal name="EV_Maximum_Voltage" offset="16" length="16">
-                <Notes>Maximum vehicle voltage (if provided).</Notes>
+                <Notes>Maximum vehicle voltage.</Notes>
+                <Value type="unsigned" slope="0.1" unit="Volts" />
+            </Signal>
+
+            <Signal name="EV_Present_Voltage" offset="32" length="16">
+                <Notes>
+                    Present voltage reported by vehicle.
+
+                    Note: Can be use in Constant Voltage mode to compensate for cable losses.
+                </Notes>
                 <Value type="unsigned" slope="0.1" unit="Volts" />
             </Signal>
         </Message>
@@ -498,6 +529,9 @@
 
                 Sent at least once after first <<New_Charge_Session>> message. As well as every time
                 vehicle changes these information.
+
+                Many of these information can be optional. There default value is 0 if the vehicle
+                did not send them.
             ]]></Notes>
 
             <Producer>
@@ -505,22 +539,22 @@
             </Producer>
 
             <Signal name="EV_Minimum_Charge_Current" offset="0" length="16">
-                <Notes>Minimum vehicle charge current (if provided).</Notes>
+                <Notes>Minimum vehicle charge current.</Notes>
                 <Value type="unsigned" slope="0.1" unit="Amps" />
             </Signal>
 
             <Signal name="EV_Maximum_Charge_Current" offset="16" length="16">
-                <Notes>Maximum vehicle charge current (if provided).</Notes>
+                <Notes>Maximum vehicle charge current.</Notes>
                 <Value type="unsigned" slope="0.1" unit="Amps" />
             </Signal>
 
             <Signal name="EV_Minimum_Charge_Power" offset="32" length="16">
-                <Notes>Minimum vehicle charge power (if provided).</Notes>
+                <Notes>Minimum vehicle charge power.</Notes>
                 <Value type="unsigned" slope="1" unit="kW" />
             </Signal>
 
             <Signal name="EV_Maximum_Charge_Power" offset="48" length="16">
-                <Notes>Maximum vehicle charge power (if provided).</Notes>
+                <Notes>Maximum vehicle charge power.</Notes>
                 <Value type="unsigned" slope="1" unit="kW" />
             </Signal>
         </Message>
@@ -531,6 +565,9 @@
 
                 Sent at least once after first <<New_Charge_Session>> message. As well as every time
                 vehicle changes these information.
+
+                Many of these information can be optional. There default value is 0 if the vehicle
+                did not send them.
             ]]></Notes>
 
             <Producer>
@@ -538,23 +575,117 @@
             </Producer>
 
             <Signal name="EV_Minimum_Discharge_Current" offset="0" length="16">
-                <Notes>Minimum vehicle discharge current (if provided).</Notes>
+                <Notes>Minimum vehicle discharge current.</Notes>
                 <Value type="unsigned" slope="0.1" unit="Amps" />
             </Signal>
 
             <Signal name="EV_Maximum_Discharge_Current" offset="16" length="16">
-                <Notes>Maximum vehicle discharge current (if provided).</Notes>
+                <Notes>Maximum vehicle discharge current.</Notes>
                 <Value type="unsigned" slope="0.1" unit="Amps" />
             </Signal>
 
             <Signal name="EV_Minimum_Discharge_Power" offset="32" length="16">
-                <Notes>Minimum vehicle discharge power (if provided).</Notes>
+                <Notes>Minimum vehicle discharge power.</Notes>
                 <Value type="unsigned" slope="1" unit="kW" />
             </Signal>
 
             <Signal name="EV_Maximum_Discharge_Power" offset="48" length="16">
-                <Notes>Maximum vehicle discharge power (if provided).</Notes>
+                <Notes>Maximum vehicle discharge power.</Notes>
                 <Value type="unsigned" slope="1" unit="kW" />
+            </Signal>
+        </Message>
+
+        <Message id="0x6B104" length="6" name="EV_Information_Energy" format="extended">
+            <Notes><![CDATA[
+                Vehicle information for energy.
+
+                Sent at least once after first <<New_Charge_Session>> message. As well as every time
+                vehicle changes these information.
+
+                Many of these information can be optional. There default value is 0 if the vehicle
+                did not send them.
+            ]]></Notes>
+
+            <Producer>
+                <NodeRef id="0"/>
+            </Producer>
+
+            <Signal name="EV_Minimum_Energy_Request" offset="0" length="16">
+                <Notes>
+                    Minimum (estimated) remaining energy vehicle will consume (positive value),
+                    or provide (negative value).
+                </Notes>
+                <Value type="signed" slope="1" unit="kWh" />
+            </Signal>
+
+            <Signal name="EV_Target_Energy_Request" offset="16" length="16">
+                <Notes>
+                    Targeted (estimated) remaining energy vehicle will consume (positive value),
+                    or provide (negative value).
+                </Notes>
+                <Value type="signed" slope="1" unit="kWh" />
+            </Signal>
+
+            <Signal name="EV_Maximum_Energy_Request" offset="32" length="16">
+                <Notes>
+                    Maximum (estimated) remaining energy vehicle will consume (positive value),
+                    or provide (negative value).
+                </Notes>
+                <Value type="signed" slope="1" unit="kWh" />
+            </Signal>
+        </Message>
+
+        <Message id="0x6B105" length="6" name="EV_ID_CCS_Part2_DIN" interval="1000" format="extended">
+            <Notes>
+                The EV ID provided by the vehicle in CCS DIN SPEC 70121 and ISO 15118-2.
+                EV ID for CCS ISO 15118-20 is not supported by this message.
+                (the EV ID is defined as a string of max 255 characters in ISO 15118-20)
+            </Notes>
+
+            <Producer>
+                <NodeRef id="0"/>
+            </Producer>
+
+            <Signal name="Byte0" offset="0" length="8">
+                <Notes>
+                    Byte 0 of the EV ID.
+                </Notes>
+                <Value type="unsigned"/>
+            </Signal>
+
+            <Signal name="Byte1" offset="8" length="8">
+                <Notes>
+                    Byte 1 of the EV ID.
+                </Notes>
+                <Value type="unsigned"/>
+            </Signal>
+
+            <Signal name="Byte2" offset="16" length="8">
+                <Notes>
+                    Byte 2 of the EV ID.
+                </Notes>
+                <Value type="unsigned"/>
+            </Signal>
+
+            <Signal name="Byte3" offset="24" length="8">
+                <Notes>
+                    Byte 3 of the EV ID.
+                </Notes>
+                <Value type="unsigned"/>
+            </Signal>
+
+            <Signal name="Byte4" offset="32" length="8">
+                <Notes>
+                    Byte 4 of the EV ID.
+                </Notes>
+                <Value type="unsigned"/>
+            </Signal>
+
+            <Signal name="Byte5" offset="40" length="8">
+                <Notes>
+                    Byte 5 of the EV ID.
+                </Notes>
+                <Value type="unsigned"/>
             </Signal>
         </Message>
 
@@ -741,7 +872,7 @@
             ]]></Notes>
 
             <Producer>
-                <NodeRef id="6"/>
+                <NodeRef id="0"/>
             </Producer>
 
             <Signal name="Dynamic_Target_Current" offset="0" length="16">
@@ -1009,7 +1140,7 @@
             <Signal name="Digital_Output1" offset="0" length="1">
                 <Notes>
                     Sets the logical state of DIG_OUT1 (CONN5, position 1).
-                    Needs to be declared as monitored in `/srv/config.cfg`:
+                    Needs to be declared as CAN Controlled in `/srv/config.cfg`:
 
                         [hardware]
                         dig_out1 = CAN_Controlled
@@ -1020,7 +1151,7 @@
             <Signal name="Digital_Output2" offset="1" length="1">
                 <Notes>
                     Reports the logical state of DIG_OUT2 (CONN5, position 2).
-                    Needs to be declared as monitored in `/srv/config.cfg`:
+                    Needs to be declared as CAN Controlled in `/srv/config.cfg`:
 
                         [hardware]
                         dig_out2 = CAN_Controlled
@@ -1031,7 +1162,7 @@
             <Signal name="Digital_Output3" offset="2" length="1">
                 <Notes>
                     Reports the logical state of DIG_OUT3 (CONN5, position 3).
-                    Needs to be declared as monitored in `/srv/config.cfg`:
+                    Needs to be declared as CAN Controlled in `/srv/config.cfg`:
 
                         [hardware]
                         dig_out3 = CAN_Controlled
@@ -1042,7 +1173,7 @@
             <Signal name="Digital_Output4" offset="3" length="1">
                 <Notes>
                     Reports the logical state of DIG_OUT4 (CONN5, position 4).
-                    Needs to be declared as monitored in `/srv/config.cfg`:
+                    Needs to be declared as CAN Controlled in `/srv/config.cfg`:
 
                         [hardware]
                         dig_out4 = CAN_Controlled
